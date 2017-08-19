@@ -1597,29 +1597,6 @@ ASYNC_RUNNING = 'ASYNC_RUNNING'
 ASYNC_SUSPENDED = 'ASYNC_SUSPENDED'
 ASYNC_CLOSED = 'ASYNC_CLOSED'
 
-class _AsyncOpWrapper:
-    def __init__(self, frame, running):
-        self.__frame__ = frame
-        self.__running__ = running
-
-_async_op_attributes = (
-    ("gi_frame", "gi_running"),
-    ("cr_frame", "cr_running"),
-    ("ag_frame", "ag_running"),
-)
-
-def _wrap_async_op(raw_async_op):
-    for frame_attr, running_attr in _async_op_attributes:
-        try:
-            frame = getattr(raw_async_op, frame_attr)
-            running = getattr(raw_async_op, running_attr)
-        except AttributeError:
-            continue
-        return _AsyncOpWrapper(frame, running)
-    # Return unknown objects unchanged
-    return raw_async_op
-
-
 def getasyncstate(async_op):
     """Get current state of an asynchronous operation
 
@@ -1632,8 +1609,6 @@ def getasyncstate(async_op):
       ASYNC_SUSPENDED: Currently suspended, awaiting future resumption
       ASYNC_CLOSED: Execution has completed.
     """
-    # Helper until objects support the protocol natively
-    async_op = _wrap_async_op(async_op)
 
     if async_op.__running__:
         return ASYNC_RUNNING
@@ -1654,8 +1629,6 @@ def getframelocals(frame):
     A dict is returned, with the keys the local variable names and values the
     bound values. This dict is always empty for __frame__ attributes that aren't
     currently bound to a frame."""
-    # Helper until objects support the protocol natively
-    frame = _wrap_async_op(frame)
 
     if hasattr(frame, "__frame__"):
         frame = frame.__frame__

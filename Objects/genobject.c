@@ -728,8 +728,11 @@ static PyGetSetDef gen_getsetlist[] = {
 
 static PyMemberDef gen_memberlist[] = {
     {"gi_frame",     T_OBJECT, offsetof(PyGenObject, gi_frame),    READONLY},
+    {"__frame__",    T_OBJECT, offsetof(PyGenObject, gi_frame),    READONLY},
     {"gi_running",   T_BOOL,   offsetof(PyGenObject, gi_running),  READONLY},
+    {"__running__",  T_BOOL,   offsetof(PyGenObject, gi_running),  READONLY},
     {"gi_code",      T_OBJECT, offsetof(PyGenObject, gi_code),     READONLY},
+    {"__code__",     T_OBJECT, offsetof(PyGenObject, gi_code),     READONLY},
     {NULL}      /* Sentinel */
 };
 
@@ -963,8 +966,11 @@ static PyGetSetDef coro_getsetlist[] = {
 
 static PyMemberDef coro_memberlist[] = {
     {"cr_frame",     T_OBJECT, offsetof(PyCoroObject, cr_frame),    READONLY},
+    {"__frame__",    T_OBJECT, offsetof(PyCoroObject, cr_frame),    READONLY},
     {"cr_running",   T_BOOL,   offsetof(PyCoroObject, cr_running),  READONLY},
+    {"__running__",  T_BOOL,   offsetof(PyCoroObject, cr_running),  READONLY},
     {"cr_code",      T_OBJECT, offsetof(PyCoroObject, cr_code),     READONLY},
+    {"__code__",     T_OBJECT, offsetof(PyCoroObject, cr_code),     READONLY},
     {NULL}      /* Sentinel */
 };
 
@@ -1401,9 +1407,12 @@ static PyGetSetDef async_gen_getsetlist[] = {
 };
 
 static PyMemberDef async_gen_memberlist[] = {
-    {"ag_frame",   T_OBJECT, offsetof(PyAsyncGenObject, ag_frame),   READONLY},
-    {"ag_running", T_BOOL,   offsetof(PyAsyncGenObject, ag_running), READONLY},
-    {"ag_code",    T_OBJECT, offsetof(PyAsyncGenObject, ag_code),    READONLY},
+    {"ag_frame",    T_OBJECT, offsetof(PyAsyncGenObject, ag_frame),   READONLY},
+    {"__frame__",   T_OBJECT, offsetof(PyAsyncGenObject, ag_frame),   READONLY},
+    {"ag_running",  T_BOOL,   offsetof(PyAsyncGenObject, ag_running), READONLY},
+    {"__running__", T_BOOL,   offsetof(PyAsyncGenObject, ag_running), READONLY},
+    {"ag_code",     T_OBJECT, offsetof(PyAsyncGenObject, ag_code),    READONLY},
+    {"__code__",    T_OBJECT, offsetof(PyAsyncGenObject, ag_code),    READONLY},
     {NULL}      /* Sentinel */
 };
 
