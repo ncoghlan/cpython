@@ -1856,24 +1856,24 @@ class TestGetAsyncOperationState(unittest.TestCase):
         op_states.append((gen, gen_states))
 
         @types.coroutine
-        def number_coroutine(state_list):
+        def number_types_coroutine(state_list):
             state_list.append(self._opstate(tcr))
             for number in range(5):
                 yield number
             state_list.append(self._opstate(tcr))
         tcr_states = []
-        tcr = number_coroutine(tcr_states)
+        tcr = number_types_coroutine(tcr_states)
         op_states.append((tcr, tcr_states))
 
-        async def coroutine(state_list):
+        async def number_native_coroutine(state_list):
             state_list.append(self._opstate(ncr))
-            await number_coroutine()
+            await number_types_coroutine([])
             state_list.append(self._opstate(ncr))
         ncr_states = []
-        ncr = number_coroutine(ncr_states)
+        ncr = number_native_coroutine(ncr_states)
         op_states.append((ncr, ncr_states))
 
-        async def number_async_generator():
+        async def number_async_generator(state_list):
             state_list.append(self._opstate(ag))
             for number in range(5):
                 yield number
@@ -1912,7 +1912,7 @@ class TestGetAsyncOperationState(unittest.TestCase):
             while True:
                 try:
                     exhaust_cr(ag.__anext__())
-                except AsyncStopIteration:
+                except StopAsyncIteration:
                     break
 
         self.exhaust_async_ops = (
@@ -1926,7 +1926,7 @@ class TestGetAsyncOperationState(unittest.TestCase):
             op.throw(exc)
 
         def throw_exc_ag(ag, exc):
-            exhaust_cr(ag.__athrow__(exc))
+            exhaust_cr(ag.athrow(exc))
 
         self.throw_exc_into_async_ops = (
             (gen, throw_exc),
@@ -1934,6 +1934,11 @@ class TestGetAsyncOperationState(unittest.TestCase):
             (ncr, throw_exc),
             (ag, throw_exc_ag),
         )
+
+    def tearDown(self):
+        for async_op in self.async_ops:
+            if hasattr(async_op, "close"):
+                async_op.close()
 
     def _opstate(self, async_op):
         return inspect.getasyncstate(async_op)
@@ -1956,7 +1961,7 @@ class TestGetAsyncOperationState(unittest.TestCase):
                 self.assertEqual(self._opstate(op), inspect.ASYNC_CLOSED)
 
     def test_closed_after_unhandled_exception(self):
-        for op, throw_exc in self.throw_into_async_ops:
+        for op, throw_exc in self.throw_exc_into_async_ops:
             with self.subTest(async_op=op):
                 with self.assertRaises(RuntimeError):
                     throw_exc(op, RuntimeError)
@@ -1964,7 +1969,7 @@ class TestGetAsyncOperationState(unittest.TestCase):
 
     def test_running(self):
         # Check all operations correctly report ASYNC_RUNNING when running
-        for idx, op, op_states in self.async_op_states:
+        for idx, (op, op_states) in enumerate(self.async_op_states):
             with self.subTest(async_op=op):
                 expected_states = []
                 self.assertEqual(op_states, expected_states)
@@ -3871,7 +3876,7 @@ def test_main():
         TestBoundArguments, TestSignaturePrivateHelpers,
         TestSignatureDefinitions,
         TestGetClosureVars, TestUnwrap, TestMain, TestReload,
-        TestGetCoroutineState
+        TestGetCoroutineState, TestGetAsyncOperationState
     )
 
 if __name__ == "__main__":

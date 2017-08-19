@@ -1599,7 +1599,7 @@ ASYNC_CLOSED = 'ASYNC_CLOSED'
 
 class _AsyncOpWrapper:
     def __init__(self, frame, running):
-        self.__frame___ = frame
+        self.__frame__ = frame
         self.__running__ = running
 
 _async_op_attributes = (
