@@ -897,7 +897,6 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
     assert(PyBytes_GET_SIZE(co->co_code) % sizeof(_Py_CODEUNIT) == 0);
     assert(_Py_IS_ALIGNED(PyBytes_AS_STRING(co->co_code), sizeof(_Py_CODEUNIT)));
     first_instr = (_Py_CODEUNIT *) PyBytes_AS_STRING(co->co_code);
-    handle_pending_after = first_instr;
     /*
        f->f_lasti refers to the index of the last instruction,
        unless it's -1 in which case next_instr should be first_instr.
@@ -915,6 +914,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
     */
     assert(f->f_lasti >= -1);
     next_instr = first_instr;
+    DEFERUNTIL(8); /* Always run the first few opcodes in a function */
     if (f->f_lasti >= 0) {
         assert(f->f_lasti % sizeof(_Py_CODEUNIT) == 0);
         next_instr += f->f_lasti / sizeof(_Py_CODEUNIT) + 1;

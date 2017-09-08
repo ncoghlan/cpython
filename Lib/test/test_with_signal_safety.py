@@ -49,14 +49,14 @@ class CheckFunctionSignalSafety(unittest.TestCase):
         self.addCleanup(sys.settrace, old_trace)
         sys.settrace(None)
 
-    def assert_lock_released(self, test_lock, target_offset, traced_operation):
+    def assert_lock_released(self, test_lock, target_offset, traced_code):
         just_acquired = test_lock.acquire(blocking=False)
         # Either we just acquired the lock, or the test didn't release it
         test_lock.release()
         if not just_acquired:
             msg = ("Context manager entered without exit due to "
                   f"exception injected at offset {target_offset} in:\n"
-                  f"{dis.Bytecode(traced_operation).dis()}")
+                  f"{dis.Bytecode(traced_code).dis()}")
             self.fail(msg)
 
     def _check_CM_exits_correctly(self, traced_function):
@@ -76,10 +76,10 @@ class CheckFunctionSignalSafety(unittest.TestCase):
                 traced_function(test_lock)
             except InjectedException:
                 # key invariant: if we entered the CM, we exited it
-                self.assert_lock_released(test_lock, target_offset, traced_function)
+                self.assert_lock_released(test_lock, target_offset, traced_code)
             else:
                 msg = (f"Exception wasn't raised @{target_offset} in:\n"
-                       f"{dis.Bytecode(traced_function).dis()}")
+                       f"{traced_code.dis()}")
                 self.fail(msg)
 
     def test_with_statement_completed(self):
@@ -137,15 +137,22 @@ class CheckCoroutineSignalSafety(unittest.TestCase):
     See https://bugs.python.org/issue29988 for more details
     """
 
-    def _test_asynchronous_cm(self):
-        # NOTE: this can't work, since asyncio is written in Python, and hence
-        # will always process pending calls at some point during the evaluation
-        # of __aenter__ and __aexit__
-        #
-        # So to handle that case, we need to some way to tell the event loop
-        # to convert pending call processing into calls to
-        # asyncio.get_event_loop().call_soon() instead of processing them
-        # immediately
+    def setUp(self):
+        old_trace = sys.gettrace()
+        self.addCleanup(sys.settrace, old_trace)
+        sys.settrace(None)
+
+    def assert_CM_balanced(self, test_cm, target_offset, traced_code):
+        if test_cm.enter_without_exit:
+            msg = ("Context manager entered without exit due to "
+                  f"exception injected at offset {target_offset} in:\n"
+                  f"{traced_code.dis()}")
+            self.fail(msg)
+
+    def _check_CM_exits_correctly(self, traced_coroutine):
+        # NOTE: to get this to work, we also needed to update ceval to ensure
+        # that at least one line in a frame is executed before signals are
+        # processed (otherwise __aexit__'s body doesn't run)
         class AsyncTrackingCM():
             def __init__(self):
                 self.enter_without_exit = None
@@ -153,24 +160,34 @@ class CheckCoroutineSignalSafety(unittest.TestCase):
                 self.enter_without_exit = True
             async def __aexit__(self, *args):
                 self.enter_without_exit = False
-        tracking_cm = AsyncTrackingCM()
-        async def traced_coroutine():
-            async with tracking_cm:
-                1 + 1
-            return
+        test_cm = AsyncTrackingCM()
         target_offset = -1
-        max_offset = len(traced_coroutine.__code__.co_code) - 2
+        traced_code = dis.Bytecode(traced_coroutine)
+        print(traced_code.dis())
+        for instruction in traced_code:
+            if instruction.opname == "RETURN_VALUE":
+                return_offset = instruction.offset
+                break
         loop = asyncio.get_event_loop()
-        while target_offset < max_offset:
+        while target_offset < return_offset:
             target_offset += 1
             raise_after_offset(traced_coroutine, target_offset)
             try:
-                loop.run_until_complete(traced_coroutine())
+                loop.run_until_complete(traced_coroutine(test_cm))
             except InjectedException:
                 # key invariant: if we entered the CM, we exited it
-                self.assertFalse(tracking_cm.enter_without_exit)
+                self.assert_CM_balanced(test_cm, target_offset, traced_code)
             else:
-                self.fail(f"Exception wasn't raised @{target_offset}")
+                msg = (f"Exception wasn't raised @{target_offset} in:\n"
+                       f"{traced_code.dis()}")
+                self.fail(msg)
+
+    def test_async_with_statement_completed(self):
+        async def traced_coroutine(test_cm):
+            async with test_cm:
+                1 + 1
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_coroutine)
 
 
 if __name__ == '__main__':
