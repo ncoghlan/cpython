@@ -968,11 +968,12 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
             if (_Py_OPCODE(*next_instr) == SETUP_FINALLY ||
                 _Py_OPCODE(*next_instr) == WITH_CLEANUP_START ||
                 _Py_OPCODE(*next_instr) == YIELD_FROM) {
-                /* Two cases where we skip running signal handlers and other
+                /* Three cases where we skip running signal handlers and other
                    pending calls:
                    - If we're about to enter the try: of a try/finally (not
                      *very* useful, but might help in some cases and it's
                      traditional)
+                   - If we're about to call __exit__ for a with statement
                    - If we're resuming a chain of nested 'yield from' or
                      'await' calls, then each frame is parked with YIELD_FROM
                      as its next opcode. If the user hit control-C we want to
