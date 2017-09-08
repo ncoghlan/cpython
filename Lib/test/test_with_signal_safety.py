@@ -1,4 +1,4 @@
-"""Additional signal safety tests for "with" and "async with"
+"""Additional signal safety tests for "with" statements
 """
 
 from test.support import cpython_only, verbose
@@ -80,42 +80,6 @@ class CheckSignalSafety(unittest.TestCase):
             except InjectedException:
                 # key invariant: if we entered the CM, we exited it
                 self.assert_lock_released(test_lock, target_offset, traced_function)
-            else:
-                self.fail(f"Exception wasn't raised @{target_offset}")
-
-
-    def _test_asynchronous_cm(self):
-        # NOTE: this can't work, since asyncio is written in Python, and hence
-        # will always process pending calls at some point during the evaluation
-        # of __aenter__ and __aexit__
-        #
-        # So to handle that case, we need to some way to tell the event loop
-        # to convert pending call processing into calls to
-        # asyncio.get_event_loop().call_soon() instead of processing them
-        # immediately
-        class AsyncTrackingCM():
-            def __init__(self):
-                self.enter_without_exit = None
-            async def __aenter__(self):
-                self.enter_without_exit = True
-            async def __aexit__(self, *args):
-                self.enter_without_exit = False
-        tracking_cm = AsyncTrackingCM()
-        async def traced_coroutine():
-            async with tracking_cm:
-                1 + 1
-            return
-        target_offset = -1
-        max_offset = len(traced_coroutine.__code__.co_code) - 2
-        loop = asyncio.get_event_loop()
-        while target_offset < max_offset:
-            target_offset += 1
-            raise_after_offset(traced_coroutine, target_offset)
-            try:
-                loop.run_until_complete(traced_coroutine())
-            except InjectedException:
-                # key invariant: if we entered the CM, we exited it
-                self.assertFalse(tracking_cm.enter_without_exit)
             else:
                 self.fail(f"Exception wasn't raised @{target_offset}")
 
