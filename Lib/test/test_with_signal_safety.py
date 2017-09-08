@@ -34,15 +34,12 @@ def raise_after_offset(target_function, target_offset):
 # exception not being injected properly)
 
 @cpython_only
-class CheckSignalSafety(unittest.TestCase):
+class CheckFunctionSignalSafety(unittest.TestCase):
     """Ensure with statements are signal-safe.
 
     Signal safety means that, regardless of when external signals (e.g.
-    KeyboardInterrupt) are received:
-
-    1. If __enter__ succeeds, __exit__ will be called
-    2. If __aenter__ succeeeds, __aexit__ will be called *and*
-       the resulting awaitable will be awaited
+    KeyboardInterrupt) are received, if __enter__ succeeds, __exit__ will
+    be called.
 
     See https://bugs.python.org/issue29988 for more details
     """
@@ -67,8 +64,12 @@ class CheckSignalSafety(unittest.TestCase):
         # but then fail to actually run as the pending call gets processed
         test_lock = threading.Lock()
         target_offset = -1
-        max_offset = len(traced_function.__code__.co_code) - 2
-        while target_offset < max_offset:
+        traced_code = dis.Bytecode(traced_function)
+        for instruction in traced_code:
+            if instruction.opname == "RETURN_VALUE":
+                return_offset = instruction.offset
+                break
+        while target_offset < return_offset:
             target_offset += 1
             raise_after_offset(traced_function, target_offset)
             try:
@@ -125,6 +126,16 @@ class CheckSignalSafety(unittest.TestCase):
             return # Make implicit final return explicit
         self._check_CM_exits_correctly(traced_function)
 
+@cpython_only
+class CheckCoroutineSignalSafety(unittest.TestCase):
+    """Ensure async with statements are signal-safe.
+
+    Signal safety means that, regardless of when external signals (e.g.
+    KeyboardInterrupt) are received, if __aenter__ succeeeds, __aexit__ will
+    be called *and* the resulting awaitable will be awaited.
+
+    See https://bugs.python.org/issue29988 for more details
+    """
 
     def _test_asynchronous_cm(self):
         # NOTE: this can't work, since asyncio is written in Python, and hence
