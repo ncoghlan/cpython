@@ -62,26 +62,59 @@ class CheckSignalSafety(unittest.TestCase):
                   f"{dis.Bytecode(traced_operation).dis()}")
             self.fail(msg)
 
-    def test_synchronous_cm(self):
+    def _check_CM_exits_correctly(self, traced_function):
         # Must use a signal-safe CM, otherwise __exit__ will start
         # but then fail to actually run as the pending call gets processed
         test_lock = threading.Lock()
-        def traced_function():
-            with test_lock:
-                1 + 1
-            return
         target_offset = -1
         max_offset = len(traced_function.__code__.co_code) - 2
         while target_offset < max_offset:
             target_offset += 1
             raise_after_offset(traced_function, target_offset)
             try:
-                traced_function()
+                traced_function(test_lock)
             except InjectedException:
                 # key invariant: if we entered the CM, we exited it
                 self.assert_lock_released(test_lock, target_offset, traced_function)
             else:
                 self.fail(f"Exception wasn't raised @{target_offset}")
+
+    def test_with_statement_completed(self):
+        def traced_function(test_cm):
+            with test_cm:
+                1 + 1
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_function)
+
+    def test_with_statement_exited_via_return(self):
+        def traced_function(test_cm):
+            with test_cm:
+                return
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_function)
+
+    def test_with_statement_exited_via_continue(self):
+        def traced_function(test_cm):
+            for i in range(1):
+                with test_cm:
+                    continue
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_function)
+
+    def test_with_statement_exited_via_break(self):
+        def traced_function(test_cm):
+            while True:
+                with test_cm:
+                    break
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_function)
+
+    def test_with_statement_exited_via_raise(self):
+        def traced_function(test_cm):
+            with test_cm:
+                1/0
+            return # Make implicit final return explicit
+        self._check_CM_exits_correctly(traced_function)
 
 
 if __name__ == '__main__':
