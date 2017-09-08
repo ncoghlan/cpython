@@ -77,7 +77,9 @@ class CheckSignalSafety(unittest.TestCase):
                 # key invariant: if we entered the CM, we exited it
                 self.assert_lock_released(test_lock, target_offset, traced_function)
             else:
-                self.fail(f"Exception wasn't raised @{target_offset}")
+                msg = (f"Exception wasn't raised @{target_offset} in:\n"
+                       f"{dis.Bytecode(traced_function).dis()}")
+                self.fail(msg)
 
     def test_with_statement_completed(self):
         def traced_function(test_cm):
