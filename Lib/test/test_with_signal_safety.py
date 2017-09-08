@@ -22,7 +22,6 @@ def raise_after_offset(target_function, target_offset):
     target_code = target_function.__code__
     def inject_exception():
         exc = InjectedException(f"Failing after {target_offset}")
-        print(f"Raising injected exception: {exc}")
         raise exc
     # This installs a trace hook that's implemented in C, and hence won't
     # trigger any of the per-bytecode processing in the eval loop
