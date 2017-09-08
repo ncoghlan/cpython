@@ -89,6 +89,7 @@ class CheckSignalSafety(unittest.TestCase):
     def test_with_statement_exited_via_return(self):
         def traced_function(test_cm):
             with test_cm:
+                1 + 1
                 return
             return # Make implicit final return explicit
         self._check_CM_exits_correctly(traced_function)
@@ -97,6 +98,7 @@ class CheckSignalSafety(unittest.TestCase):
         def traced_function(test_cm):
             for i in range(1):
                 with test_cm:
+                    1 + 1
                     continue
             return # Make implicit final return explicit
         self._check_CM_exits_correctly(traced_function)
@@ -105,14 +107,19 @@ class CheckSignalSafety(unittest.TestCase):
         def traced_function(test_cm):
             while True:
                 with test_cm:
+                    1 + 1
                     break
             return # Make implicit final return explicit
         self._check_CM_exits_correctly(traced_function)
 
     def test_with_statement_exited_via_raise(self):
         def traced_function(test_cm):
-            with test_cm:
-                1/0
+            try:
+                with test_cm:
+                    1 + 1
+                    1/0
+            except ZeroDivisionError:
+                pass
             return # Make implicit final return explicit
         self._check_CM_exits_correctly(traced_function)
 

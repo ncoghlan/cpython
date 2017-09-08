@@ -966,6 +966,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 
         if (_Py_atomic_load_relaxed(&eval_breaker)) {
             if (_Py_OPCODE(*next_instr) == SETUP_FINALLY ||
+                _Py_OPCODE(*next_instr) == WITH_CLEANUP_START ||
                 _Py_OPCODE(*next_instr) == YIELD_FROM) {
                 /* Two cases where we skip running signal handlers and other
                    pending calls:
