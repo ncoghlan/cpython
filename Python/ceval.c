@@ -3138,11 +3138,6 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
             DISPATCH();
         }
 
-        TARGET(DEFER_PENDING_UNTIL) {
-            PREDICT(POP_BLOCK);
-            DISPATCH();
-        }
-
         TARGET(LOAD_METHOD) {
             /* Designed to work in tamdem with CALL_METHOD. */
             PyObject *name = GETITEM(names, oparg);
