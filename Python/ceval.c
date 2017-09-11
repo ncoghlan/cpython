@@ -659,7 +659,8 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 #ifdef LLTRACE
 #define FAST_DISPATCH() \
     { \
-        if (_Py_OPCODE(*next_instr) == RETURN_VALUE) { \
+        if (_Py_OPCODE(*next_instr) == RETURN_VALUE || \
+            _Py_OPCODE(*next_instr) == POP_BLOCK) { \
             continue; /* Always check signals before returning */ \
         } \
         if (!lltrace && !_Py_TracingPossible && !PyDTrace_LINE_ENABLED()) { \
@@ -672,7 +673,8 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 #else
 #define FAST_DISPATCH() \
     { \
-        if (_Py_OPCODE(*next_instr) == RETURN_VALUE) { \
+        if (_Py_OPCODE(*next_instr) == RETURN_VALUE || \
+            _Py_OPCODE(*next_instr) == POP_BLOCK) { \
             continue; /* Always check signals before returning */ \
         } \
         if (!_Py_TracingPossible && !PyDTrace_LINE_ENABLED()) { \
@@ -962,36 +964,36 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
            Py_MakePendingCalls() above. */
 
         if (_Py_atomic_load_relaxed(&_PyRuntime.ceval.eval_breaker)) {
-            if (_Py_OPCODE(*next_instr) == YIELD_FROM ||
-                _Py_OPCODE(*current_instr) == YIELD_FROM) {
+            if (_Py_OPCODE(*next_instr) == YIELD_FROM) {
                 /* If we're resuming a chain of nested 'yield from' or
                    'await' calls, then each frame is parked with YIELD_FROM
                    as its next opcode. If the user hit control-C we want to
                    wait until we've reached the innermost frame before
                    running the signal handler and raising KeyboardInterrupt
                    (see bpo-30039).
-
-                   However, for `async with`, we also want to ensure we
-                   correctly enter the try/finally after `__aenter__` returns,
-                   so we also skip pending calls when resuming execution
-                   immediately after YIELD_FROM
-                   (see bpo-29988)
                 */
                 goto fast_next_opcode;
             }
-            /* We check for pending calls & async exceptions if we *didn't*
-             * just advance the instruction pointer as that means either
-             * we just started a new frame or resumed an existing one,
-             * or else a loop just jumped backwards.
+            /* We check for pending calls & async exceptions if the next
+             * instruction is *earlier* in the compiled code than the current
+             * opcode (as this indicates jumping back in a loop)
              *
-             * We also check if we're about to *return* from a function.
+             * We also ensure we check for signals if we're about to *return*
+             * from a function, or are about to pop the jump target block
+             * for a loop or try/except/finally statement.
              *
              * These locations are generally safe from interfering with
              * the correct execution of with and try/finally statements.
+             *
+             * We deliberately *don't* check for exceptions when *starting*
+             * a call, as this can lead to __exit__ methods unexpectedly failing,
+             * while checking at the end provides opportunity for __enter__
+             * methods to switch off the check in that frame.
              * (see bpo-29988).
              */
-             if (next_instr <= current_instr ||
-                 _Py_OPCODE(*next_instr) == RETURN_VALUE) {
+             if (next_instr < current_instr ||
+                 _Py_OPCODE(*next_instr) == RETURN_VALUE ||
+                 _Py_OPCODE(*next_instr) == POP_BLOCK) {
                 /* Check for pending calls */
                 if (_Py_atomic_load_relaxed(&_Py_PendingEvalState.calls_to_do)) {
                     if (Py_MakePendingCalls() < 0)
