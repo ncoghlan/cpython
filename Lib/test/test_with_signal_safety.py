@@ -67,9 +67,9 @@ class CheckFunctionSignalSafety(unittest.TestCase):
         traced_code = dis.Bytecode(traced_function)
         for instruction in traced_code:
             if instruction.opname == "RETURN_VALUE":
-                return_offset = instruction.offset
                 break
-        while target_offset < return_offset:
+            max_offset = instruction.offset
+        while target_offset < max_offset:
             target_offset += 1
             raise_after_offset(traced_function, target_offset)
             try:
@@ -78,9 +78,16 @@ class CheckFunctionSignalSafety(unittest.TestCase):
                 # key invariant: if we entered the CM, we exited it
                 self.assert_lock_released(test_lock, target_offset, traced_code)
             else:
-                msg = (f"Exception wasn't raised @{target_offset} in:\n"
-                       f"{traced_code.dis()}")
-                self.fail(msg)
+                try:
+                    msg = (f"Exception wasn't raised @{target_offset} in:\n"
+                        f"{traced_code.dis()}")
+                    self.fail(msg)
+                except InjectedException:
+                    # The pending call was still active when we tried to report
+                    # the fact the exception wasn't raised by the traced function
+                    msg = (f"Pending calls weren't processed after @{target_offset} in:\n"
+                        f"{traced_code.dis()}")
+                    self.fail(msg)
 
     def test_with_statement_completed(self):
         def traced_function(test_cm):
@@ -163,13 +170,12 @@ class CheckCoroutineSignalSafety(unittest.TestCase):
         test_cm = AsyncTrackingCM()
         target_offset = -1
         traced_code = dis.Bytecode(traced_coroutine)
-        print(traced_code.dis())
         for instruction in traced_code:
             if instruction.opname == "RETURN_VALUE":
-                return_offset = instruction.offset
                 break
+            max_offset = instruction.offset
         loop = asyncio.get_event_loop()
-        while target_offset < return_offset:
+        while target_offset < max_offset:
             target_offset += 1
             raise_after_offset(traced_coroutine, target_offset)
             try:

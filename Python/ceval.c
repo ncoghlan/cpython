@@ -92,6 +92,7 @@ static long dxp[256];
 #endif
 
 #define GIL_REQUEST _Py_atomic_load_relaxed(&_PyRuntime.ceval.gil_drop_request)
+#define _Py_PendingEvalState _PyRuntime.ceval.pending
 
 /* This can set eval_breaker to 0 even though gil_drop_request became
    1.  We believe this is all right because the eval loop will release
@@ -100,8 +101,8 @@ static long dxp[256];
     _Py_atomic_store_relaxed( \
         &_PyRuntime.ceval.eval_breaker, \
         GIL_REQUEST | \
-        _Py_atomic_load_relaxed(&_PyRuntime.ceval.pending.calls_to_do) | \
-        _PyRuntime.ceval.pending.async_exc)
+        _Py_atomic_load_relaxed(&_Py_PendingEvalState.calls_to_do) | \
+        _Py_PendingEvalState.async_exc)
 
 #define SET_GIL_DROP_REQUEST() \
     do { \
@@ -118,25 +119,25 @@ static long dxp[256];
 /* Pending calls are only modified under pending_lock */
 #define SIGNAL_PENDING_CALLS() \
     do { \
-        _Py_atomic_store_relaxed(&_PyRuntime.ceval.pending.calls_to_do, 1); \
+        _Py_atomic_store_relaxed(&_Py_PendingEvalState.calls_to_do, 1); \
         _Py_atomic_store_relaxed(&_PyRuntime.ceval.eval_breaker, 1); \
     } while (0)
 
 #define UNSIGNAL_PENDING_CALLS() \
     do { \
-        _Py_atomic_store_relaxed(&_PyRuntime.ceval.pending.calls_to_do, 0); \
+        _Py_atomic_store_relaxed(&_Py_PendingEvalState.calls_to_do, 0); \
         COMPUTE_EVAL_BREAKER(); \
     } while (0)
 
 #define SIGNAL_ASYNC_EXC() \
     do { \
-        _PyRuntime.ceval.pending.async_exc = 1; \
+        _Py_PendingEvalState.async_exc = 1; \
         _Py_atomic_store_relaxed(&_PyRuntime.ceval.eval_breaker, 1); \
     } while (0)
 
 #define UNSIGNAL_ASYNC_EXC() \
     do { \
-        _PyRuntime.ceval.pending.async_exc = 0; \
+        _Py_PendingEvalState.async_exc = 0; \
         COMPUTE_EVAL_BREAKER(); \
     } while (0)
 
@@ -160,9 +161,9 @@ PyEval_InitThreads(void)
         return;
     create_gil();
     take_gil(PyThreadState_GET());
-    _PyRuntime.ceval.pending.main_thread = PyThread_get_thread_ident();
-    if (!_PyRuntime.ceval.pending.lock)
-        _PyRuntime.ceval.pending.lock = PyThread_allocate_lock();
+    _Py_PendingEvalState.main_thread = PyThread_get_thread_ident();
+    if (!_Py_PendingEvalState.lock)
+        _Py_PendingEvalState.lock = PyThread_allocate_lock();
 }
 
 void
@@ -230,9 +231,9 @@ PyEval_ReInitThreads(void)
     if (!gil_created())
         return;
     recreate_gil();
-    _PyRuntime.ceval.pending.lock = PyThread_allocate_lock();
+    _Py_PendingEvalState.lock = PyThread_allocate_lock();
     take_gil(current_tstate);
-    _PyRuntime.ceval.pending.main_thread = PyThread_get_thread_ident();
+    _Py_PendingEvalState.main_thread = PyThread_get_thread_ident();
 
     /* Destroy all threads except the current one */
     _PyThreadState_DeleteExcept(current_tstate);
@@ -322,7 +323,7 @@ int
 Py_AddPendingCall(int (*func)(void *), void *arg)
 {
     int i, j, result=0;
-    PyThread_type_lock lock = _PyRuntime.ceval.pending.lock;
+    PyThread_type_lock lock = _Py_PendingEvalState.lock;
 
     /* try a few times for the lock.  Since this mechanism is used
      * for signal handling (on the main thread), there is a (slim)
@@ -344,14 +345,14 @@ Py_AddPendingCall(int (*func)(void *), void *arg)
             return -1;
     }
 
-    i = _PyRuntime.ceval.pending.last;
+    i = _Py_PendingEvalState.last;
     j = (i + 1) % NPENDINGCALLS;
-    if (j == _PyRuntime.ceval.pending.first) {
+    if (j == _Py_PendingEvalState.first) {
         result = -1; /* Queue full */
     } else {
-        _PyRuntime.ceval.pending.calls[i].func = func;
-        _PyRuntime.ceval.pending.calls[i].arg = arg;
-        _PyRuntime.ceval.pending.last = j;
+        _Py_PendingEvalState.calls[i].func = func;
+        _Py_PendingEvalState.calls[i].arg = arg;
+        _Py_PendingEvalState.last = j;
     }
     /* signal main loop */
     SIGNAL_PENDING_CALLS();
@@ -369,16 +370,16 @@ Py_MakePendingCalls(void)
 
     assert(PyGILState_Check());
 
-    if (!_PyRuntime.ceval.pending.lock) {
+    if (!_Py_PendingEvalState.lock) {
         /* initial allocation of the lock */
-        _PyRuntime.ceval.pending.lock = PyThread_allocate_lock();
-        if (_PyRuntime.ceval.pending.lock == NULL)
+        _Py_PendingEvalState.lock = PyThread_allocate_lock();
+        if (_Py_PendingEvalState.lock == NULL)
             return -1;
     }
 
     /* only service pending calls on main thread */
-    if (_PyRuntime.ceval.pending.main_thread &&
-        PyThread_get_thread_ident() != _PyRuntime.ceval.pending.main_thread)
+    if (_Py_PendingEvalState.main_thread &&
+        PyThread_get_thread_ident() != _Py_PendingEvalState.main_thread)
     {
         return 0;
     }
@@ -403,16 +404,16 @@ Py_MakePendingCalls(void)
         void *arg = NULL;
 
         /* pop one item off the queue while holding the lock */
-        PyThread_acquire_lock(_PyRuntime.ceval.pending.lock, WAIT_LOCK);
-        j = _PyRuntime.ceval.pending.first;
-        if (j == _PyRuntime.ceval.pending.last) {
+        PyThread_acquire_lock(_Py_PendingEvalState.lock, WAIT_LOCK);
+        j = _Py_PendingEvalState.first;
+        if (j == _Py_PendingEvalState.last) {
             func = NULL; /* Queue empty */
         } else {
-            func = _PyRuntime.ceval.pending.calls[j].func;
-            arg = _PyRuntime.ceval.pending.calls[j].arg;
-            _PyRuntime.ceval.pending.first = (j + 1) % NPENDINGCALLS;
+            func = _Py_PendingEvalState.calls[j].func;
+            arg = _Py_PendingEvalState.calls[j].arg;
+            _Py_PendingEvalState.first = (j + 1) % NPENDINGCALLS;
         }
-        PyThread_release_lock(_PyRuntime.ceval.pending.lock);
+        PyThread_release_lock(_Py_PendingEvalState.lock);
         /* having released the lock, perform the callback */
         if (func == NULL)
             break;
@@ -557,6 +558,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 #endif
     PyObject **stack_pointer;  /* Next free slot in value stack */
     const _Py_CODEUNIT *next_instr;
+    const _Py_CODEUNIT *current_instr; /* Reliably detect loops jumping back */
     int opcode;        /* Current opcode */
     int oparg;         /* Current opcode argument, if any */
     enum why_code why; /* Reason for block stack unwind */
@@ -575,7 +577,6 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
     int instr_ub = -1, instr_lb = 0, instr_prev = -1;
 
     const _Py_CODEUNIT *first_instr;
-    const _Py_CODEUNIT *handle_pending_after;
     PyObject *names;
     PyObject *consts;
 
@@ -658,6 +659,9 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 #ifdef LLTRACE
 #define FAST_DISPATCH() \
     { \
+        if (_Py_OPCODE(*next_instr) == RETURN_VALUE) { \
+            continue; /* Always check signals before returning */ \
+        } \
         if (!lltrace && !_Py_TracingPossible && !PyDTrace_LINE_ENABLED()) { \
             f->f_lasti = INSTR_OFFSET(); \
             NEXTOPARG(); \
@@ -668,6 +672,9 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 #else
 #define FAST_DISPATCH() \
     { \
+        if (_Py_OPCODE(*next_instr) == RETURN_VALUE) { \
+            continue; /* Always check signals before returning */ \
+        } \
         if (!_Py_TracingPossible && !PyDTrace_LINE_ENABLED()) { \
             f->f_lasti = INSTR_OFFSET(); \
             NEXTOPARG(); \
@@ -703,12 +710,11 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         _Py_CODEUNIT word = *next_instr; \
         opcode = _Py_OPCODE(word); \
         oparg = _Py_OPARG(word); \
+        current_instr = next_instr; \
         next_instr++; \
     } while (0)
 #define JUMPTO(x)       (next_instr = first_instr + (x) / sizeof(_Py_CODEUNIT))
 #define JUMPBY(x)       (next_instr += (x) / sizeof(_Py_CODEUNIT))
-#define DEFERUNTIL(x)   (handle_pending_after = next_instr + (x) / sizeof(_Py_CODEUNIT))
-#define DEFER_OFFSET()  (sizeof(_Py_CODEUNIT) * (int)(handle_pending_after - first_instr))
 
 /* OpCode prediction macros
     Some opcodes tend to come in pairs thus making it possible to
@@ -745,6 +751,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         opcode = _Py_OPCODE(word); \
         if (opcode == op){ \
             oparg = _Py_OPARG(word); \
+            current_instr = next_instr;
             next_instr++; \
             goto PRED_##op; \
         } \
@@ -904,11 +911,11 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
     */
     assert(f->f_lasti >= -1);
     next_instr = first_instr;
-    DEFERUNTIL(8); /* Always run the first few opcodes in a function */
     if (f->f_lasti >= 0) {
         assert(f->f_lasti % sizeof(_Py_CODEUNIT) == 0);
         next_instr += f->f_lasti / sizeof(_Py_CODEUNIT) + 1;
     }
+    current_instr = next_instr;
     stack_pointer = f->f_stacktop;
     assert(stack_pointer != NULL);
     f->f_stacktop = NULL;       /* remains NULL unless yield suspends frame */
@@ -955,33 +962,53 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
            Py_MakePendingCalls() above. */
 
         if (_Py_atomic_load_relaxed(&_PyRuntime.ceval.eval_breaker)) {
-            if (_Py_OPCODE(*next_instr) == SETUP_FINALLY ||
-                _Py_OPCODE(*next_instr) == WITH_CLEANUP_START ||
-                _Py_OPCODE(*next_instr) == YIELD_FROM) {
-                /* Three cases where we skip running signal handlers and other
-                   pending calls:
-                   - If we're about to enter the try: of a try/finally (not
-                     *very* useful, but might help in some cases and it's
-                     traditional)
-                   - If we're about to call __exit__ for a with statement
-                   - If we're resuming a chain of nested 'yield from' or
-                     'await' calls, then each frame is parked with YIELD_FROM
-                     as its next opcode. If the user hit control-C we want to
-                     wait until we've reached the innermost frame before
-                     running the signal handler and raising KeyboardInterrupt
-                     (see bpo-30039).
+            if (_Py_OPCODE(*next_instr) == YIELD_FROM ||
+                _Py_OPCODE(*current_instr) == YIELD_FROM) {
+                /* If we're resuming a chain of nested 'yield from' or
+                   'await' calls, then each frame is parked with YIELD_FROM
+                   as its next opcode. If the user hit control-C we want to
+                   wait until we've reached the innermost frame before
+                   running the signal handler and raising KeyboardInterrupt
+                   (see bpo-30039).
+
+                   However, for `async with`, we also want to ensure we
+                   correctly enter the try/finally after `__aenter__` returns,
+                   so we also skip pending calls when resuming execution
+                   immediately after YIELD_FROM
+                   (see bpo-29988)
                 */
                 goto fast_next_opcode;
             }
-            if (_Py_atomic_load_relaxed(
-                        &_PyRuntime.ceval.pending.calls_to_do))
-            {
-                if (Py_MakePendingCalls() < 0)
+            /* We check for pending calls & async exceptions if we *didn't*
+             * just advance the instruction pointer as that means either
+             * we just started a new frame or resumed an existing one,
+             * or else a loop just jumped backwards.
+             *
+             * We also check if we're about to *return* from a function.
+             *
+             * These locations are generally safe from interfering with
+             * the correct execution of with and try/finally statements.
+             * (see bpo-29988).
+             */
+             if (next_instr <= current_instr ||
+                 _Py_OPCODE(*next_instr) == RETURN_VALUE) {
+                /* Check for pending calls */
+                if (_Py_atomic_load_relaxed(&_Py_PendingEvalState.calls_to_do)) {
+                    if (Py_MakePendingCalls() < 0)
+                        goto error;
+                }
+                /* Check for asynchronous exceptions. */
+                if (tstate->async_exc != NULL) {
+                    PyObject *exc = tstate->async_exc;
+                    tstate->async_exc = NULL;
+                    UNSIGNAL_ASYNC_EXC();
+                    PyErr_SetNone(exc);
+                    Py_DECREF(exc);
                     goto error;
+                }
             }
-            if (_Py_atomic_load_relaxed(
-                        &_PyRuntime.ceval.gil_drop_request))
-            {
+            /* Check if we should surrender the GIL to another thread */
+            if (_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil_drop_request)) {
                 /* Give another thread a chance */
                 if (PyThreadState_Swap(NULL) != tstate)
                     Py_FatalError("ceval: tstate mix-up");
@@ -1001,15 +1028,6 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 
                 if (PyThreadState_Swap(tstate) != NULL)
                     Py_FatalError("ceval: orphan tstate");
-            }
-            /* Check for asynchronous exceptions. */
-            if (tstate->async_exc != NULL) {
-                PyObject *exc = tstate->async_exc;
-                tstate->async_exc = NULL;
-                UNSIGNAL_ASYNC_EXC();
-                PyErr_SetNone(exc);
-                Py_DECREF(exc);
-                goto error;
             }
         }
 
@@ -2846,18 +2864,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         PREDICTED(JUMP_ABSOLUTE);
         TARGET(JUMP_ABSOLUTE) {
             JUMPTO(oparg);
-#if FAST_LOOPS
-            /* Enabling this path speeds-up all while and for-loops by bypassing
-               the per-loop checks for signals.  By default, this should be turned-off
-               because it prevents detection of a control-break in tight loops like
-               "while 1: pass".  Compile with this option turned-on when you need
-               the speed-up and do not need break checking inside tight loops (ones
-               that contain only instructions ending with FAST_DISPATCH).
-            */
-            FAST_DISPATCH();
-#else
             DISPATCH();
-#endif
         }
 
         TARGET(GET_ITER) {
@@ -3132,7 +3139,6 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
         }
 
         TARGET(DEFER_PENDING_UNTIL) {
-            DEFERUNTIL(oparg);
             PREDICT(POP_BLOCK);
             DISPATCH();
         }
@@ -5131,8 +5137,10 @@ unicode_concatenate(PyObject *v, PyObject *w,
          * 'variable'.  We try to delete the variable now to reduce
          * the refcnt to 1.
          */
+        _Py_CODEUNIT word = *next_instr;
         int opcode, oparg;
-        NEXTOPARG();
+        opcode = _Py_OPCODE(word);
+        oparg = _Py_OPARG(word);
         switch (opcode) {
         case STORE_FAST:
         {
