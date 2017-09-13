@@ -1841,6 +1841,167 @@ class TestGetCoroutineState(unittest.TestCase):
         self.assertEqual(inspect.getcoroutinelocals(coro),
                          {'a': None, 'gencoro': gencoro, 'b': 'spam'})
 
+class TestGetAsyncOperationState(unittest.TestCase):
+
+    def setUp(self):
+        self.async_op_states = op_states = []
+
+        def number_generator(state_list):
+            state_list.append(self._opstate(gen))
+            for number in range(5):
+                yield number
+            state_list.append(self._opstate(gen))
+        gen_states = []
+        gen = number_generator(gen_states)
+        op_states.append((gen, gen_states))
+
+        @types.coroutine
+        def number_types_coroutine(state_list):
+            state_list.append(self._opstate(tcr))
+            for number in range(5):
+                yield number
+            state_list.append(self._opstate(tcr))
+        tcr_states = []
+        tcr = number_types_coroutine(tcr_states)
+        op_states.append((tcr, tcr_states))
+
+        async def number_native_coroutine(state_list):
+            state_list.append(self._opstate(ncr))
+            await number_types_coroutine([])
+            state_list.append(self._opstate(ncr))
+        ncr_states = []
+        ncr = number_native_coroutine(ncr_states)
+        op_states.append((ncr, ncr_states))
+
+        async def number_async_generator(state_list):
+            state_list.append(self._opstate(ag))
+            for number in range(5):
+                yield number
+            state_list.append(self._opstate(ag))
+        ag_states = []
+        ag = number_async_generator(ag_states)
+        op_states.append((ag, ag_states))
+
+        self.async_ops = (gen, tcr, ncr, ag)
+
+        def step_async_generator_once(ag):
+            try:
+                next(ag.__anext__())
+            except StopIteration as exc:
+                return exc.value
+            raise RuntimeError("Test async generator didn't yield a value")
+
+        self.step_async_ops = (
+            (gen, next),
+            (tcr, lambda cr: cr.send(None)),
+            (ncr, lambda cr: cr.send(None)),
+            (ag, step_async_generator_once),
+        )
+
+        def exhaust_iter(itr):
+            for x in itr: pass
+
+        def exhaust_cr(cr):
+            while True:
+                try:
+                    cr.send(None)
+                except StopIteration:
+                    break
+
+        def exhaust_ag(ag):
+            while True:
+                try:
+                    exhaust_cr(ag.__anext__())
+                except StopAsyncIteration:
+                    break
+
+        self.exhaust_async_ops = (
+            (gen, exhaust_iter),
+            (tcr, exhaust_cr),
+            (ncr, exhaust_cr),
+            (ag, exhaust_ag),
+        )
+
+        def throw_exc(op, exc):
+            op.throw(exc)
+
+        def throw_exc_ag(ag, exc):
+            exhaust_cr(ag.athrow(exc))
+
+        self.throw_exc_into_async_ops = (
+            (gen, throw_exc),
+            (tcr, throw_exc),
+            (ncr, throw_exc),
+            (ag, throw_exc_ag),
+        )
+
+    def tearDown(self):
+        for async_op in self.async_ops:
+            if hasattr(async_op, "close"):
+                async_op.close()
+
+    def _opstate(self, async_op):
+        return inspect.getasyncstate(async_op)
+
+    def test_created(self):
+        for op in self.async_ops:
+            with self.subTest(async_op=op):
+                self.assertEqual(self._opstate(op), inspect.ASYNC_CREATED)
+
+    def test_suspended(self):
+        for op, step_once in self.step_async_ops:
+            with self.subTest(async_op=op):
+                step_once(op)
+                self.assertEqual(self._opstate(op), inspect.ASYNC_SUSPENDED)
+
+    def test_closed_after_exhaustion(self):
+        for op, exhaust in self.exhaust_async_ops:
+            with self.subTest(async_op=op):
+                exhaust(op)
+                self.assertEqual(self._opstate(op), inspect.ASYNC_CLOSED)
+
+    def test_closed_after_unhandled_exception(self):
+        for op, throw_exc in self.throw_exc_into_async_ops:
+            with self.subTest(async_op=op):
+                with self.assertRaises(RuntimeError):
+                    throw_exc(op, RuntimeError)
+                self.assertEqual(self._opstate(op), inspect.ASYNC_CLOSED)
+
+    def test_running(self):
+        # Check all operations correctly report ASYNC_RUNNING when running
+        for idx, (op, op_states) in enumerate(self.async_op_states):
+            with self.subTest(async_op=op):
+                expected_states = []
+                self.assertEqual(op_states, expected_states)
+                step_once = self.step_async_ops[idx][1]
+                step_once(op)
+                expected_states.append(inspect.ASYNC_RUNNING)
+                self.assertEqual(op_states, expected_states)
+                exhaust = self.exhaust_async_ops[idx][1]
+                exhaust(op)
+                expected_states.append(inspect.ASYNC_RUNNING)
+                self.assertEqual(op_states, expected_states)
+
+    def test_easy_debugging(self):
+        # repr() and str() of the operation states should contain the state names
+        names = 'ASYNC_CREATED ASYNC_RUNNING ASYNC_SUSPENDED ASYNC_CLOSED'.split()
+        for name in names:
+            state = getattr(inspect, name)
+            self.assertIn(name, repr(state))
+            self.assertIn(name, str(state))
+
+    def test_getframelocals(self):
+        pass #TODO
+
+    def test_getframelocals_empty(self):
+        pass #TODO
+
+    def test_getframelocals_error(self):
+        self.assertRaises(TypeError, inspect.getframelocals, 1)
+        self.assertRaises(TypeError, inspect.getframelocals, lambda x: True)
+        self.assertRaises(TypeError, inspect.getframelocals, set)
+        self.assertRaises(TypeError, inspect.getframelocals, (2,3))
+
 
 class MySignature(inspect.Signature):
     # Top-level to make it picklable;
@@ -3715,7 +3876,7 @@ def test_main():
         TestBoundArguments, TestSignaturePrivateHelpers,
         TestSignatureDefinitions,
         TestGetClosureVars, TestUnwrap, TestMain, TestReload,
-        TestGetCoroutineState
+        TestGetCoroutineState, TestGetAsyncOperationState
     )
 
 if __name__ == "__main__":

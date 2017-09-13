@@ -1590,6 +1590,56 @@ def getattr_static(obj, attr, default=_sentinel):
     raise AttributeError(attr)
 
 
+# ----------------------------------------------- async operation introspection
+
+ASYNC_CREATED = 'ASYNC_CREATED'
+ASYNC_RUNNING = 'ASYNC_RUNNING'
+ASYNC_SUSPENDED = 'ASYNC_SUSPENDED'
+ASYNC_CLOSED = 'ASYNC_CLOSED'
+
+def getasyncstate(async_op):
+    """Get current state of an asynchronous operation
+
+    Async operations are any operations that support the asyncronous state
+    introspection protocol (__frame__ and __running__)
+
+    Possible states are:
+      ASYNC_CREATED: Waiting to start execution.
+      ASYNC_RUNNING: Currently being executed by the interpreter.
+      ASYNC_SUSPENDED: Currently suspended, awaiting future resumption
+      ASYNC_CLOSED: Execution has completed.
+    """
+
+    if async_op.__running__:
+        return ASYNC_RUNNING
+    if async_op.__frame__ is None:
+        return ASYNC_CLOSED
+    if async_op.__frame__.f_lasti == -1:
+        return ASYNC_CREATED
+    return ASYNC_SUSPENDED
+
+
+def getframelocals(frame):
+    """
+    Get the mapping of local variables to their current values.
+
+    The input must be either a frame object, or else an object with a
+    __frame__ attribute that references either a __frame__ object or None.
+
+    A dict is returned, with the keys the local variable names and values the
+    bound values. This dict is always empty for __frame__ attributes that aren't
+    currently bound to a frame."""
+
+    if hasattr(frame, "__frame__"):
+        frame = frame.__frame__
+        if frame is None:
+            return {}
+
+    if not isframe(frame):
+        raise TypeError("'{!r}' is not a Python frame object".format(frame))
+
+    return frame.f_locals
+
 # ------------------------------------------------ generator introspection
 
 GEN_CREATED = 'GEN_CREATED'
