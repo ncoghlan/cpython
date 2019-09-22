@@ -30,7 +30,7 @@
 /* The .so extension module ABI tag, supplied by the Makefile via
    Makefile.pre.in and configure.  This is used to discriminate between
    incompatible .so files so that extensions for different Python builds can
-   live in the same directory.  E.g. foomodule.cpython-32.so
+   live in the same directory.  E.g. foomodule.cpython-38.so
 */
 
 const char *_PyImport_DynLoadFiletab[] = {
