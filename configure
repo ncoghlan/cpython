@@ -15100,7 +15100,7 @@ $as_echo "#define AC_APPLE_UNIVERSAL_BUILD 1" >>confdefs.h
 # the released interpreter.
 
 
-SOABI_PREFIX="cpython_unstable"
+SOABI_PREFIX="cpython_prerelease"
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking ABIFLAGS" >&5

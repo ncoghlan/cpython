@@ -7,7 +7,7 @@ m4_define(PYTHON_VERSION, 3.9)
 
 # Prior to the ABI freeze for a release, mark extension modules as being
 # built against a not yet stable version of the CPython ABI
-m4_define(CPYTHON_SOABI_PREFIX, "cpython_unstable")
+m4_define(CPYTHON_SOABI_PREFIX, "cpython_prerelease")
 
 # Once the maintenance branch is created and the release ABI is locked,
 # the marker suffix is removed:
