@@ -7,11 +7,12 @@ m4_define(PYTHON_VERSION, 3.9)
 
 # Prior to the ABI freeze for a release, mark extension modules as being
 # built against a not yet stable version of the CPython ABI
-m4_define(CPYTHON_SOABI_PREFIX, "cpython_prerelease")
+# ("p" is short for "pre-release")
+m4_define(SOABI_CAVEAT, "p")
 
 # Once the maintenance branch is created and the release ABI is locked,
-# the marker suffix is removed:
-# m4_define(CPYTHON_SOABI_PREFIX, "cpython")
+# the pre-release caveat is removed:
+# m4_define(SOABI_CAVEAT, "")
 
 AC_PREREQ([2.69])
 
@@ -1219,7 +1220,7 @@ fi
 
 # For calculating the .so ABI tag.
 AC_SUBST(ABIFLAGS)
-ABIFLAGS=""
+ABIFLAGS=SOABI_CAVEAT
 
 # Check for --with-pydebug
 AC_MSG_CHECKING(for --with-pydebug)
@@ -4615,40 +4616,37 @@ AC_C_BIGENDIAN
 # from the following attributes which affect the ABI of this Python build (in
 # this order):
 #
-# * The Python implementation ABI prefix (given in SOABI_PREFIX)
+# * The Python implementation ABI prefix (always 'cpython-' for CPython)
 # * The major and minor version numbers
+# * The pre-release SOABI caveat (set to 'p' to indicate a not-yet-stable ABI)
 # * --with-pydebug (adds a 'd')
-# * The Python ABI suffix (which is set to indicate a not-yet-stable ABI)
 #
 # In Python 3.2 and older, --with-wide-unicode added a 'u' flag.
 # In Python 3.7 and older, --with-pymalloc added a 'm' flag.
 #
-# Thus for example, Python 3.8 built with pydebug, would get a shared library
+# Thus, for example, Python 3.8.x built with pydebug, would get a shared library
 # ABI version tag of 'cpython-38d' and shared libraries would be named
 # 'foo.cpython-38d.so'.
 #
-# Prior to the ABI freeze, the implementation prefix is "cpython_unstable",
-# so Python 3.9.0a1 built with pydebug would get a shared library ABI version
-# tag of 'cpython_unstable-32d' and shared libraries would be named
-# 'foo.cpython_unstable-32d.so'. This ensures that extension modules built
+# Prior to the ABI freeze, "p" is added to the tags, so Python 3.9.0a1 built
+# with pydebug would get a shared library ABI version tag of
+# 'cpython_unstable-39pd' and shared libraries would be named
+# 'foo.cpython-39pd.so'. This ensures that extension modules built
 # against a not-yet-stable version of the pre-release API won't be loaded by
 # the released interpreter.
-
-AC_SUBST(SOABI_PREFIX)
-SOABI_PREFIX=CPYTHON_SOABI_PREFIX
 
 AC_SUBST(SOABI)
 AC_MSG_CHECKING(ABIFLAGS)
 AC_MSG_RESULT($ABIFLAGS)
 AC_MSG_CHECKING(SOABI)
-SOABI=`echo "${SOABI_PREFIX}-${VERSION}" | tr -d .`${ABIFLAGS}${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
+SOABI='cpython-'`echo $VERSION | tr -d .`${ABIFLAGS}${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
 AC_MSG_RESULT($SOABI)
 
 # Release and debug (Py_DEBUG) ABI are compatible, but not Py_TRACE_REFS ABI
 if test "$Py_DEBUG" = 'true' -a "$with_trace_refs" != "yes"; then
   # Similar to SOABI but remove "d" flag from ABIFLAGS
   AC_SUBST(ALT_SOABI)
-  ALT_SOABI=`echo "${SOABI_PREFIX}-${VERSION}" | tr -d .``echo $ABIFLAGS | tr -d d`${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
+  ALT_SOABI='cpython-'`echo $VERSION | tr -d .``echo $ABIFLAGS | tr -d d`${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
   AC_DEFINE_UNQUOTED(ALT_SOABI, "${ALT_SOABI}",
             [Alternative SOABI used in debug build to load C extensions built in release mode])
 fi

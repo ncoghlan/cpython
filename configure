@@ -635,7 +635,6 @@ LIBPYTHON
 EXT_SUFFIX
 ALT_SOABI
 SOABI
-SOABI_PREFIX
 LIBC
 LIBM
 HAVE_GETHOSTBYNAME
@@ -6312,7 +6311,7 @@ fi
 
 # For calculating the .so ABI tag.
 
-ABIFLAGS=""
+ABIFLAGS="p"
 
 # Check for --with-pydebug
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-pydebug" >&5
@@ -15080,27 +15079,24 @@ $as_echo "#define AC_APPLE_UNIVERSAL_BUILD 1" >>confdefs.h
 # from the following attributes which affect the ABI of this Python build (in
 # this order):
 #
-# * The Python implementation ABI prefix (given in SOABI_PREFIX)
+# * The Python implementation ABI prefix (always 'cpython-' for CPython)
 # * The major and minor version numbers
+# * The pre-release SOABI caveat (set to 'p' to indicate a not-yet-stable ABI)
 # * --with-pydebug (adds a 'd')
-# * The Python ABI suffix (which is set to indicate a not-yet-stable ABI)
 #
 # In Python 3.2 and older, --with-wide-unicode added a 'u' flag.
 # In Python 3.7 and older, --with-pymalloc added a 'm' flag.
 #
-# Thus for example, Python 3.8 built with pydebug, would get a shared library
+# Thus, for example, Python 3.8.x built with pydebug, would get a shared library
 # ABI version tag of 'cpython-38d' and shared libraries would be named
 # 'foo.cpython-38d.so'.
 #
-# Prior to the ABI freeze, the implementation prefix is "cpython_unstable",
-# so Python 3.9.0a1 built with pydebug would get a shared library ABI version
-# tag of 'cpython_unstable-32d' and shared libraries would be named
-# 'foo.cpython_unstable-32d.so'. This ensures that extension modules built
+# Prior to the ABI freeze, "p" is added to the tags, so Python 3.9.0a1 built
+# with pydebug would get a shared library ABI version tag of
+# 'cpython_unstable-39pd' and shared libraries would be named
+# 'foo.cpython-39pd.so'. This ensures that extension modules built
 # against a not-yet-stable version of the pre-release API won't be loaded by
 # the released interpreter.
-
-
-SOABI_PREFIX="cpython_prerelease"
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking ABIFLAGS" >&5
@@ -15109,7 +15105,7 @@ $as_echo_n "checking ABIFLAGS... " >&6; }
 $as_echo "$ABIFLAGS" >&6; }
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking SOABI" >&5
 $as_echo_n "checking SOABI... " >&6; }
-SOABI=`echo "${SOABI_PREFIX}-${VERSION}" | tr -d .`${ABIFLAGS}${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
+SOABI='cpython-'`echo $VERSION | tr -d .`${ABIFLAGS}${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $SOABI" >&5
 $as_echo "$SOABI" >&6; }
 
@@ -15117,7 +15113,7 @@ $as_echo "$SOABI" >&6; }
 if test "$Py_DEBUG" = 'true' -a "$with_trace_refs" != "yes"; then
   # Similar to SOABI but remove "d" flag from ABIFLAGS
 
-  ALT_SOABI=`echo "${SOABI_PREFIX}-${VERSION}" | tr -d .``echo $ABIFLAGS | tr -d d`${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
+  ALT_SOABI='cpython-'`echo $VERSION | tr -d .``echo $ABIFLAGS | tr -d d`${PLATFORM_TRIPLET:+-$PLATFORM_TRIPLET}
 
 cat >>confdefs.h <<_ACEOF
 #define ALT_SOABI "${ALT_SOABI}"
