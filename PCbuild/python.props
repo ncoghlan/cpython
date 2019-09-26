@@ -200,15 +200,18 @@
         ))
     ))</Field3Value>
     <Field3Value Condition="$(UseTestMarker) == 'true'">$([msbuild]::Add($(Field3Value), 9000))</Field3Value>
-    
+
     <!-- The name of the resulting pythonXY.dll (without the extension) -->
     <PyDllName>python$(MajorVersionNumber)$(MinorVersionNumber)$(PyDebugExt)</PyDllName>
 
     <!-- The version and platform tag to include in .pyd filenames -->
-    <PydTag Condition="$(ArchName) == 'win32'">.cp$(MajorVersionNumber)$(MinorVersionNumber)-win32</PydTag>
-    <PydTag Condition="$(ArchName) == 'arm32'">.cp$(MajorVersionNumber)$(MinorVersionNumber)-win_arm32</PydTag>
-    <PydTag Condition="$(ArchName) == 'arm64'">.cp$(MajorVersionNumber)$(MinorVersionNumber)-win_arm64</PydTag>
-    <PydTag Condition="$(ArchName) == 'amd64'">.cp$(MajorVersionNumber)$(MinorVersionNumber)-win_amd64</PydTag>
+    <PreReleaseCaveat></PreReleaseCaveat>
+    <PreReleaseCaveat Condition="$(_ReleaseLevelNumber) <= 11">p</PreReleaseCaveat>
+    <PydCommonTag>.cp$(MajorVersionNumber)$(MinorVersionNumber)$(PreReleaseCaveat)</PydTag>
+    <PydTag Condition="$(ArchName) == 'win32'">$(PydCommonTag)-win32</PydTag>
+    <PydTag Condition="$(ArchName) == 'arm32'">$(PydCommonTag)-win_arm32</PydTag>
+    <PydTag Condition="$(ArchName) == 'arm64'">$(PydCommonTag)-win_arm64</PydTag>
+    <PydTag Condition="$(ArchName) == 'amd64'">$(PydCommonTag)-win_amd64</PydTag>
     
     <!-- The version number for sys.winver -->
     <SysWinVer>$(MajorVersionNumber).$(MinorVersionNumber)$(PyArchExt)$(PyTestExt)</SysWinVer>
@@ -223,6 +226,7 @@
     <Message Importance="high" Text="Field3Value:         $(Field3Value)" />
     <Message Importance="high" Text="SysWinVer:           $(SysWinVer)" />
     <Message Importance="high" Text="PyDllName:           $(PyDllName)" />
+    <Message Importance="high" Text="PydTag:              $(PydTag)" />
     <Message Importance="high" Text="WindowsSdkVersion:   $(TargetPlatformVersion)" />
   </Target>
 </Project>
