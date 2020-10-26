@@ -871,9 +871,10 @@ make_type(astmodulestate *state, const char *type, PyObject* base,
         }
         PyTuple_SET_ITEM(fnames, i, field);
     }
-    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){OOOOOs}",
+    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){OOOOOOOs}",
                     type, base,
                     state->_fields, fnames,
+                    state->__match_args__, fnames,
                     state->__module__,
                     state->ast,
                     state->__doc__, doc);
@@ -1004,6 +1005,7 @@ static int add_ast_fields(astmodulestate *state)
     empty_tuple = PyTuple_New(0);
     if (!empty_tuple ||
         PyObject_SetAttrString(state->AST_type, "_fields", empty_tuple) < 0 ||
+        PyObject_SetAttrString(state->AST_type, "__match_args__", empty_tuple) < 0 ||
         PyObject_SetAttrString(state->AST_type, "_attributes", empty_tuple) < 0) {
         Py_XDECREF(empty_tuple);
         return -1;
@@ -1355,6 +1357,7 @@ def generate_module_def(f, mod):
     state_strings = {
         "ast",
         "_fields",
+        "__match_args__",
         "__doc__",
         "__dict__",
         "__module__",

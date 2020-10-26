@@ -201,6 +201,11 @@ struct compiler {
     PyArena *c_arena;            /* pointer to memory allocation arena */
 };
 
+typedef struct {
+    PyObject *stores;
+    int allow_irrefutable;
+} pattern_context;
+
 static int compiler_enter_scope(struct compiler *, identifier, int, void *, int);
 static void compiler_free(struct compiler *);
 static basicblock *compiler_new_block(struct compiler *);
@@ -208,7 +213,7 @@ static int compiler_next_instr(basicblock *);
 static int compiler_addop(struct compiler *, int);
 static int compiler_addop_i(struct compiler *, int, Py_ssize_t);
 static int compiler_addop_j(struct compiler *, int, basicblock *);
-static int compiler_error(struct compiler *, const char *);
+static int compiler_error(struct compiler *, const char *, ...);
 static int compiler_warn(struct compiler *, const char *, ...);
 static int compiler_nameop(struct compiler *, identifier, expr_context_ty);
 
@@ -245,6 +250,9 @@ static int compiler_async_comprehension_generator(
                                       asdl_comprehension_seq *generators, int gen_index,
                                       int depth,
                                       expr_ty elt, expr_ty val, int type);
+
+static int compiler_pattern(struct compiler *, expr_ty, pattern_context *);
+static int compiler_match(struct compiler *, stmt_ty);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
 static PyObject *__doc__, *__annotations__;
@@ -1125,6 +1133,17 @@ stack_effect(int opcode, int oparg, int jump)
         case DICT_MERGE:
         case DICT_UPDATE:
             return -1;
+        case GET_LEN:
+            return 1;
+        case MATCH_CLASS:
+            return 0;
+        case GET_INDEX:
+        case GET_INDEX_END:
+        case GET_INDEX_SLICE:
+        case MATCH_KEYS:
+        case MATCH_MAPPING:
+        case MATCH_SEQUENCE:
+            return 1;
         default:
             return PY_INVALID_STACK_EFFECT;
     }
@@ -1544,6 +1563,11 @@ compiler_addop_j(struct compiler *c, int opcode, basicblock *b)
         } \
     } \
 }
+
+#define CHECK(X)  \
+    if (!(X)) {   \
+        return 0; \
+    }
 
 /* These macros allows to check only for errors and not emmit bytecode
  * while visiting nodes.
@@ -3403,6 +3427,8 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
         return compiler_while(c, s);
     case If_kind:
         return compiler_if(c, s);
+    case Match_kind:
+        return compiler_match(c, s);
     case Raise_kind:
         n = 0;
         if (s->v.Raise.exc) {
@@ -4119,13 +4145,8 @@ validate_keywords(struct compiler *c, asdl_keyword_seq *keywords)
         for (Py_ssize_t j = i + 1; j < nkeywords; j++) {
             keyword_ty other = ((keyword_ty)asdl_seq_GET(keywords, j));
             if (other->arg && !PyUnicode_Compare(key->arg, other->arg)) {
-                PyObject *msg = PyUnicode_FromFormat("keyword argument repeated: %U", key->arg);
-                if (msg == NULL) {
-                    return -1;
-                }
                 c->u->u_col_offset = other->col_offset;
-                compiler_error(c, PyUnicode_AsUTF8(msg));
-                Py_DECREF(msg);
+                compiler_error(c, "keyword argument repeated: %U", key->arg);
                 return -1;
             }
         }
@@ -5110,6 +5131,10 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_list(c, e);
     case Tuple_kind:
         return compiler_tuple(c, e);
+    case MatchAs_kind:
+    case MatchOr_kind:
+        // Can only occur in patterns, which are handled elsewhere.
+        Py_UNREACHABLE();
     }
     return 1;
 }
@@ -5296,28 +5321,34 @@ compiler_annassign(struct compiler *c, stmt_ty s)
 */
 
 static int
-compiler_error(struct compiler *c, const char *errstr)
+compiler_error(struct compiler *c, const char *format, ...)
 {
-    PyObject *loc;
-    PyObject *u = NULL, *v = NULL;
-
-    loc = PyErr_ProgramTextObject(c->c_filename, c->u->u_lineno);
+    va_list vargs;
+#ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+#else
+    va_start(vargs);
+#endif
+    PyObject *msg = PyUnicode_FromFormatV(format, vargs);
+    va_end(vargs);
+    if (!msg) {
+        return 0;
+    }
+    PyObject *loc = PyErr_ProgramTextObject(c->c_filename, c->u->u_lineno);
     if (!loc) {
         Py_INCREF(Py_None);
         loc = Py_None;
     }
-    u = Py_BuildValue("(OiiO)", c->c_filename, c->u->u_lineno,
-                      c->u->u_col_offset + 1, loc);
-    if (!u)
+    PyObject *args = Py_BuildValue("O(OiiO)", msg, c->c_filename,
+                                   c->u->u_lineno, c->u->u_col_offset + 1, loc);
+    Py_DECREF(msg);
+    if (!args) {
         goto exit;
-    v = Py_BuildValue("(zO)", errstr, u);
-    if (!v)
-        goto exit;
-    PyErr_SetObject(PyExc_SyntaxError, v);
+    }
+    PyErr_SetObject(PyExc_SyntaxError, args);
  exit:
     Py_DECREF(loc);
-    Py_XDECREF(u);
-    Py_XDECREF(v);
+    Py_XDECREF(args);
     return 0;
 }
 
@@ -5411,6 +5442,601 @@ compiler_slice(struct compiler *c, expr_ty s)
     ADDOP_I(c, BUILD_SLICE, n);
     return 1;
 }
+
+
+// PEP 634: Structural Pattern Matching
+
+// To keep things simple, all compiler_pattern_* routines follow the convention
+// of preserving TOS (the subject for the given pattern) and pushing either True
+// (match) or False (no match) on top of it. We do this even for irrefutable
+// patterns; the idea is that it's much easier to smooth out any redundant
+// pushing, popping, and jumping in the peephole optimizer than to detect or
+// predict it here.
+
+
+#define WILDCARD_CHECK(N) \
+    ((N)->kind == Name_kind && \
+    _PyUnicode_EqualToASCIIString((N)->v.Name.id, "_"))
+
+
+static int
+pattern_helper_load_attr(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Attribute_kind);
+    assert(p->v.Attribute.ctx == Load);
+    if (p->v.Attribute.value->kind == Attribute_kind) {
+        CHECK(pattern_helper_load_attr(c, p->v.Attribute.value, pc));
+    }
+    else {
+        assert(p->v.Attribute.value->kind == Name_kind);
+        assert(p->v.Attribute.value->v.Name.ctx == Load);
+        CHECK(compiler_nameop(c, p->v.Attribute.value->v.Name.id, Load));
+    }
+    ADDOP_NAME(c, LOAD_ATTR, p->v.Attribute.attr, names);
+    return 1;
+}
+
+
+static int
+pattern_helper_load_constant(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Constant_kind);
+    assert(p->v.Constant.value == Py_None ||
+           PyBool_Check(p->v.Constant.value) ||
+           PyBytes_CheckExact(p->v.Constant.value) ||
+           PyComplex_CheckExact(p->v.Constant.value) ||
+           PyFloat_CheckExact(p->v.Constant.value) ||
+           PyLong_CheckExact(p->v.Constant.value) ||
+           PyUnicode_CheckExact(p->v.Constant.value));
+    ADDOP_LOAD_CONST(c, p->v.Constant.value);
+    return 1;
+}
+
+
+static int
+pattern_helper_store_name(struct compiler *c, identifier n, pattern_context *pc)
+{
+    assert(!_PyUnicode_EqualToASCIIString(n, "_"));
+    // Can't assign to the same name twice:
+    if (!pc->stores) {
+        CHECK(pc->stores = PySet_New(NULL));
+    }
+    else {
+        int duplicate = PySet_Contains(pc->stores, n);
+        if (duplicate < 0) {
+            return 0;
+        }
+        if (duplicate) {
+            const char *e = "multiple assignments to name %R in pattern";
+            return compiler_error(c, e, n);
+        }
+    }
+    CHECK(!PySet_Add(pc->stores, n));
+    CHECK(compiler_nameop(c, n, Store));
+    return 1;
+}
+
+
+static int
+compiler_pattern_subpattern(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    // Like compiler_pattern, but turn off checks for irrefutability.
+    int allow_irrefutable = pc->allow_irrefutable;
+    pc->allow_irrefutable = 1;
+    CHECK(compiler_pattern(c, p, pc));
+    pc->allow_irrefutable = allow_irrefutable;
+    return 1;
+}
+
+
+static int
+compiler_pattern_as(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == MatchAs_kind);
+    basicblock *end;
+    CHECK(end = compiler_new_block(c));
+    CHECK(compiler_pattern(c, p->v.MatchAs.pattern, pc));
+    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+    NEXT_BLOCK(c);
+    ADDOP(c, DUP_TOP);
+    CHECK(pattern_helper_store_name(c, p->v.MatchAs.name, pc));
+    ADDOP_LOAD_CONST(c, Py_True);
+    compiler_use_next_block(c, end);
+    return 1;
+}
+
+
+static int
+compiler_pattern_capture(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Name_kind);
+    assert(p->v.Name.ctx == Store);
+    assert(!WILDCARD_CHECK(p));
+    if (!pc->allow_irrefutable) {
+        // Whoops, can't have a name capture here!
+        const char *e = "name capture %R makes remaining patterns unreachable";
+        return compiler_error(c, e, p->v.Name.id);
+    }
+    ADDOP(c, DUP_TOP);
+    CHECK(pattern_helper_store_name(c, p->v.Name.id, pc));
+    ADDOP_LOAD_CONST(c, Py_True);
+    return 1;
+}
+
+
+static int
+compiler_pattern_class(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    asdl_expr_seq *args = p->v.Call.args;
+    asdl_keyword_seq *kwargs = p->v.Call.keywords;
+    Py_ssize_t nargs = asdl_seq_LEN(args);
+    Py_ssize_t nkwargs = asdl_seq_LEN(kwargs);
+    if (INT_MAX < nargs || INT_MAX < nargs + nkwargs - 1) {
+        const char *e = "too many sub-patterns in class pattern %R";
+        return compiler_error(c, e, p->v.Call.func);
+    }
+    CHECK(!validate_keywords(c, kwargs));
+    basicblock *end;
+    CHECK(end = compiler_new_block(c));
+    // The name of the class can only be an (optionally dotted) name:
+    if (p->v.Call.func->kind == Attribute_kind) {
+        CHECK(pattern_helper_load_attr(c, p->v.Call.func, pc));
+    }
+    else {
+        assert(p->v.Call.func->kind == Name_kind);
+        assert(p->v.Call.func->v.Name.ctx == Load);
+        CHECK(compiler_nameop(c, p->v.Call.func->v.Name.id, Load));
+    }
+    PyObject *kwnames;
+    CHECK(kwnames = PyTuple_New(nkwargs));
+    Py_ssize_t i;
+    for (i = 0; i < nkwargs; i++) {
+        PyObject *name = ((keyword_ty) asdl_seq_GET(kwargs, i))->arg;
+        Py_INCREF(name);
+        PyTuple_SET_ITEM(kwnames, i, name);
+    }
+    ADDOP_LOAD_CONST_NEW(c, kwnames);
+    ADDOP_I(c, MATCH_CLASS, nargs);
+    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+    NEXT_BLOCK(c);
+    // TOS is now a tuple of (nargs + nkwargs) attributes.
+    for (i = 0; i < nargs + nkwargs; i++) {
+        expr_ty arg;
+        if (i < nargs) {
+            // Positional:
+            arg = asdl_seq_GET(args, i);
+        }
+        else {
+            // Keyword:
+            arg = ((keyword_ty) asdl_seq_GET(kwargs, i - nargs))->value;
+        }
+        if (WILDCARD_CHECK(arg)) {
+            continue;
+        }
+        // Get the i-th attribute, and match it against the i-th pattern:
+        ADDOP_I(c, GET_INDEX, i);
+        CHECK(compiler_pattern_subpattern(c, arg, pc));
+        // TOS is True or False, with the attribute beneath. Pop the attribute,
+        // we're done with it:
+        ADDOP(c, ROT_TWO);
+        ADDOP(c, POP_TOP);
+        ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+        NEXT_BLOCK(c);
+    }
+    // If we made it this far, it's a match!
+    ADDOP_LOAD_CONST(c, Py_True);
+    compiler_use_next_block(c, end);
+    // TOS is True or False, but we've still got either a class or a tuple of
+    // attributes beneath it. Pop it, we're done.
+    ADDOP(c, ROT_TWO);
+    ADDOP(c, POP_TOP);
+    return 1;
+}
+
+
+static int
+compiler_pattern_literal(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Constant_kind);
+    ADDOP(c, DUP_TOP);
+    CHECK(pattern_helper_load_constant(c, p, pc));
+    PyObject *v = p->v.Constant.value;
+    // Literal True, False, and None are compared by identity. All others use
+    // equality:
+    ADDOP_COMPARE(c, (v == Py_None || PyBool_Check(v)) ? Is : Eq);
+    return 1;
+}
+
+
+static int
+compiler_pattern_mapping(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    basicblock *fail, *end;
+    CHECK(fail = compiler_new_block(c));
+    CHECK(end = compiler_new_block(c));
+    asdl_expr_seq *keys = p->v.Dict.keys;
+    asdl_expr_seq *values = p->v.Dict.values;
+    Py_ssize_t size = asdl_seq_LEN(values);
+    // A starred pattern will be a keyless value. It is guranteed to be last:
+    int star = size ? !asdl_seq_GET(keys, size - 1) : 0;
+    ADDOP(c, MATCH_MAPPING);
+    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+    NEXT_BLOCK(c);
+    if (!size) {
+        // If the pattern is just "{}", we're done!
+        ADDOP_LOAD_CONST(c, Py_True);
+        compiler_use_next_block(c, end);
+        return 1;
+    }
+    if (size - star) {
+        // If the pattern has any keys in it, perform a length check:
+        ADDOP(c, GET_LEN);
+        ADDOP_LOAD_CONST_NEW(c, PyLong_FromSsize_t(size - star));
+        ADDOP_COMPARE(c, GtE);
+        ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+        NEXT_BLOCK(c);
+    }
+    if (INT_MAX < size - star - 1) {
+        return compiler_error(c, "too many sub-patterns in mapping pattern");
+    }
+    // If we have a starred pattern, MATCH_KEYS *could* replace the subject on
+    // the stack with a dict of remaining keys. Duplicate it so we don't lose
+    // the subject:
+    ADDOP(c, DUP_TOP);
+    // Collect all of the keys into a tuple for MATCH_KEYS. They can either be
+    // dotted names or literals:
+    for (Py_ssize_t i = 0; i < size - star; i++) {
+        expr_ty key = asdl_seq_GET(keys, i);
+        if (!key) {
+            const char *e = "can't use starred name here "
+                            "(consider moving to end)";
+            return compiler_error(c, e);
+        }
+        if (key->kind == Attribute_kind) {
+            CHECK(pattern_helper_load_attr(c, key, pc));
+        }
+        else {
+            assert(key->kind == Constant_kind);
+            CHECK(pattern_helper_load_constant(c, key, pc));
+        }
+    }
+    ADDOP_I(c, BUILD_TUPLE, size - star);
+    ADDOP_I(c, MATCH_KEYS, star);
+    ADDOP_JUMP(c, POP_JUMP_IF_FALSE, fail);
+    NEXT_BLOCK(c);
+    // So far so good. There's now a tuple of values on the stack to match
+    // sub-patterns against. Extract them using GET_INDEX:
+    for (Py_ssize_t i = 0; i < size - star; i++) {
+        expr_ty value = asdl_seq_GET(values, i);
+        if (WILDCARD_CHECK(value)) {
+            continue;
+        }
+        ADDOP_I(c, GET_INDEX, i);
+        CHECK(compiler_pattern_subpattern(c, value, pc));
+        // TOS is True or False. Don't care about the value underneath anymore:
+        ADDOP(c, ROT_TWO);
+        ADDOP(c, POP_TOP);
+        ADDOP_JUMP(c, POP_JUMP_IF_FALSE, fail);
+        NEXT_BLOCK(c);
+    }
+    // If we get this far, it's a match! We're done with that tuple of values.
+    ADDOP(c, POP_TOP);
+    if (star) {
+        // There's now one of two things on TOS. If we had a starred name, it's
+        // a dict of remaining items to bind:
+        PyObject *id = asdl_seq_GET(values, size - 1)->v.Name.id;
+        CHECK(pattern_helper_store_name(c, id, pc));
+    }
+    else {
+        // Otherwise, it's just another reference to the subject underneath.
+        ADDOP(c, POP_TOP);
+    }
+    ADDOP_LOAD_CONST(c, Py_True);
+    ADDOP_JUMP(c, JUMP_FORWARD, end);
+    compiler_use_next_block(c, fail);
+    // The top two items are a tuple of values, and a mapping. Pop them both:
+    ADDOP(c, POP_TOP);
+    ADDOP(c, POP_TOP);
+    ADDOP_LOAD_CONST(c, Py_False);
+    compiler_use_next_block(c, end);
+    return 1;
+}
+
+
+static int
+compiler_pattern_or(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == MatchOr_kind);
+    // control is the set of names bound by the first alternative. If all of the
+    // others bind the same names (they should), then this becomes pc->stores.
+    PyObject *control = NULL;
+    basicblock *end;
+    CHECK(end = compiler_new_block(c));
+    Py_ssize_t size = asdl_seq_LEN(p->v.MatchOr.patterns);
+    assert(size > 1);
+    // We're going to be messing with pc. Keep the original info handy:
+    PyObject *stores_init = pc->stores;
+    int allow_irrefutable = pc->allow_irrefutable;
+    for (Py_ssize_t i = 0; i < size; i++) {
+        // NOTE: Can't use our nice returning macros in here: they'll leak sets!
+        expr_ty alt = asdl_seq_GET(p->v.MatchOr.patterns, i);
+        pc->stores = PySet_New(stores_init);
+        // An irrefutable sub-pattern must be last, if it is allowed at all:
+        pc->allow_irrefutable = allow_irrefutable && (i == size - 1);
+        SET_LOC(c, alt);
+        // The actual control flow is simple:
+        if (!pc->stores ||
+            !compiler_pattern(c, alt, pc) ||
+            !compiler_addop_j(c, JUMP_IF_TRUE_OR_POP, end) ||
+            !compiler_next_block(c))
+        {
+            goto fail;
+        }
+        if (!i) {
+            // If this is the first alternative, save its stores as a "control"
+            // for the others (they can't bind a different set names):
+            control = pc->stores;
+            continue;
+        }
+        if (PySet_GET_SIZE(pc->stores) || PySet_GET_SIZE(control)) {
+            // Otherwise, check to see if we differ from the control set:
+            PyObject *diff = PyNumber_InPlaceXor(pc->stores, control);
+            if (!diff) {
+                goto fail;
+            }
+            if (PySet_GET_SIZE(diff)) {
+                // The names differ! Raise.
+                Py_DECREF(diff);
+                compiler_error(c, "alternative patterns bind different names");
+                goto fail;
+            }
+            Py_DECREF(diff);
+        }
+        Py_DECREF(pc->stores);
+    }
+    Py_XDECREF(stores_init);
+    // Update pc->stores and restore pc->allow_irrefutable:
+    pc->stores = control;
+    pc->allow_irrefutable = allow_irrefutable;
+    ADDOP_LOAD_CONST(c, Py_False);
+    compiler_use_next_block(c, end);
+    return 1;
+fail:
+    Py_XDECREF(stores_init);
+    Py_XDECREF(control);
+    return 0;
+}
+
+
+static int
+compiler_pattern_sequence(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == List_kind || p->kind == Tuple_kind);
+    asdl_expr_seq *values = (p->kind == Tuple_kind) ? p->v.Tuple.elts
+                                                    : p->v.List.elts;
+    Py_ssize_t size = asdl_seq_LEN(values);
+    // Find a starred name, if it exists. There may be at most one:
+    Py_ssize_t star = -1;
+    for (Py_ssize_t i = 0; i < size; i++) {
+        expr_ty value = asdl_seq_GET(values, i);
+        if (value->kind != Starred_kind) {
+            continue;
+        }
+        if (star >= 0) {
+            const char *e = "multiple starred names in sequence pattern";
+            return compiler_error(c, e);
+        }
+        star = i;
+    }
+    basicblock *end;
+    CHECK(end = compiler_new_block(c));
+    ADDOP(c, MATCH_SEQUENCE);
+    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+    NEXT_BLOCK(c);
+    ADDOP(c, GET_LEN);
+    if (!size) {
+        // Empty sequences only require a length check:
+        ADDOP_LOAD_CONST(c, _PyLong_Zero);
+        ADDOP_COMPARE(c, Eq);
+        compiler_use_next_block(c, end);
+        return 1;
+    }
+    basicblock *wrong_size;
+    CHECK(wrong_size = compiler_new_block(c));
+    // Duplicate the length, since both the length check and the GET_INDEX_*
+    // instructions need it:
+    ADDOP(c, DUP_TOP)
+    if (star < 0) {
+        ADDOP_LOAD_CONST_NEW(c, PyLong_FromSsize_t(size));
+        ADDOP_COMPARE(c, Eq);
+    }
+    else {
+        ADDOP_LOAD_CONST_NEW(c, PyLong_FromSsize_t(size - 1));
+        ADDOP_COMPARE(c, GtE);
+    }
+    ADDOP_JUMP(c, POP_JUMP_IF_FALSE, wrong_size);
+    NEXT_BLOCK(c);
+    if (INT_MAX < size - 1) {
+        return compiler_error(c, "too many sub-patterns in sequence pattern");
+    }
+    basicblock *fail;
+    CHECK(fail = compiler_new_block(c));
+    ADDOP(c, ROT_TWO);
+    // TOS is subject, length underneath.
+    for (Py_ssize_t i = 0; i < size; i++) {
+        expr_ty value = asdl_seq_GET(values, i);
+        if (WILDCARD_CHECK(value)) {
+            continue;
+        }
+        if (star < 0 || i < star) {
+            ADDOP_I(c, GET_INDEX, i);
+        }
+        else if (i == star) {
+            assert(value->kind == Starred_kind);
+            value = value->v.Starred.value;
+            if (WILDCARD_CHECK(value)) {
+                continue;
+            }
+            Py_ssize_t end_items = ((size - 1 - i) << 8);
+            if (0xFF <= i || INT_MAX <= end_items) {
+                // Technical limits are 0xFF patterns to the left of the star,
+                // one starred pattern, and 0xFFFFFF patterns to the right of
+                // the star... same as UNPACK_EX.
+                const char* e = "too many sub-patterns in sequence pattern";
+                return compiler_error(c, e);
+            }
+            ADDOP_I(c, GET_INDEX_SLICE, end_items + i);
+        }
+        else {
+            // Basically a negative index:
+            ADDOP_I(c, GET_INDEX_END, size - 1 - i);
+        }
+        CHECK(compiler_pattern_subpattern(c, value, pc));
+        // TOS is True or False. We're done with the item underneath:
+        ADDOP(c, ROT_TWO);
+        ADDOP(c, POP_TOP);
+        ADDOP_JUMP(c, POP_JUMP_IF_FALSE, fail)
+        NEXT_BLOCK(c);
+    }
+    // Success! TOS is subject, length undeneath. Pop the length:
+    ADDOP(c, ROT_TWO);
+    ADDOP(c, POP_TOP);
+    ADDOP_LOAD_CONST(c, Py_True);
+    ADDOP_JUMP(c, JUMP_FORWARD, end);
+    compiler_use_next_block(c, fail);
+    // TOS is subject, length undeneath. Pop the length:
+    ADDOP(c, ROT_TWO);
+    compiler_use_next_block(c, wrong_size);
+    // TOS is the subject's length. Pop it:
+    ADDOP(c, POP_TOP);
+    ADDOP_LOAD_CONST(c, Py_False);
+    compiler_use_next_block(c, end);
+    return 1;
+}
+
+
+static int
+compiler_pattern_value(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Attribute_kind);
+    assert(p->v.Attribute.ctx == Load);
+    ADDOP(c, DUP_TOP);
+    CHECK(pattern_helper_load_attr(c, p, pc));
+    ADDOP_COMPARE(c, Eq);
+    return 1;
+}
+
+
+static int
+compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == Name_kind);
+    assert(p->v.Name.ctx == Store);
+    assert(WILDCARD_CHECK(p));
+    if (!pc->allow_irrefutable) {
+        // Whoops, can't have a wildcard here!
+        const char *e = "wildcard makes remaining patterns unreachable";
+        return compiler_error(c, e);
+    }
+    ADDOP_LOAD_CONST(c, Py_True);
+    return 1;
+}
+
+
+static int
+compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    SET_LOC(c, p);
+    switch (p->kind) {
+        case Attribute_kind:
+            return compiler_pattern_value(c, p, pc);
+        case BinOp_kind:
+            // Because we allow "2+2j", things like "2+2" make it this far:
+            return compiler_error(c, "patterns cannot include operators");
+        case Call_kind:
+            return compiler_pattern_class(c, p, pc);
+        case Constant_kind:
+            return compiler_pattern_literal(c, p, pc);
+        case Dict_kind:
+            return compiler_pattern_mapping(c, p, pc);
+        case JoinedStr_kind:
+            // Because we allow strings, f-strings make it this far:
+            return compiler_error(c, "patterns cannot include f-strings");
+        case List_kind:
+        case Tuple_kind:
+            return compiler_pattern_sequence(c, p, pc);
+        case MatchAs_kind:
+            return compiler_pattern_as(c, p, pc);
+        case MatchOr_kind:
+            return compiler_pattern_or(c, p, pc);
+        case Name_kind:
+            if (WILDCARD_CHECK(p)) {
+                return compiler_pattern_wildcard(c, p, pc);
+            }
+            return compiler_pattern_capture(c, p, pc);
+        default:
+            Py_UNREACHABLE();
+    }
+}
+
+
+static int
+compiler_match(struct compiler *c, stmt_ty s)
+{
+    VISIT(c, expr, s->v.Match.subject);
+    basicblock *next, *end;
+    CHECK(end = compiler_new_block(c));
+    Py_ssize_t cases = asdl_seq_LEN(s->v.Match.cases);
+    assert(cases);
+    pattern_context pc;
+    // We use pc.stores to track:
+    // - Repeated name assignments in the same pattern.
+    // - Different name assignments in alternatives.
+    // It's a set of names, but we don't create it until it's needed:
+    pc.stores = NULL;
+    match_case_ty m = asdl_seq_GET(s->v.Match.cases, cases - 1);
+    int has_default = WILDCARD_CHECK(m->pattern) && 1 < cases;
+    for (Py_ssize_t i = 0; i < cases - has_default; i++) {
+        m = asdl_seq_GET(s->v.Match.cases, i);
+        SET_LOC(c, m->pattern);
+        CHECK(next = compiler_new_block(c));
+        // If pc.allow_irrefutable is 0, any name captures against our subject
+        // will raise. Irrefutable cases must be either guarded, last, or both:
+        pc.allow_irrefutable = !!m->guard || (i == cases - 1);
+        int result = compiler_pattern(c, m->pattern, &pc);
+        Py_CLEAR(pc.stores);
+        CHECK(result);
+        // TOS is either True or False, with the subject still waiting beneath:
+        ADDOP_JUMP(c, POP_JUMP_IF_FALSE, next);
+        NEXT_BLOCK(c);
+        if (m->guard) {
+            CHECK(compiler_jump_if(c, m->guard, next, 0));
+        }
+        // Success! Pop the subject off, we're done with it:
+        ADDOP(c, POP_TOP);
+        VISIT_SEQ(c, stmt, m->body);
+        ADDOP_JUMP(c, JUMP_FORWARD, end);
+        compiler_use_next_block(c, next);
+    }
+    // No matches. Done with the subject:
+    ADDOP(c, POP_TOP);
+    if (has_default) {
+        // A trailing "case _" is common, and lets us save a bit of redundant
+        // pushing and popping in the loop above:
+        m = asdl_seq_GET(s->v.Match.cases, cases - 1);
+        SET_LOC(c, m->pattern);
+        if (m->guard) {
+            CHECK(compiler_jump_if(c, m->guard, end, 0));
+        }
+        VISIT_SEQ(c, stmt, m->body);
+    }
+    compiler_use_next_block(c, end);
+    return 1;
+}
+
+
+#undef WILDCARD_CHECK
+
 
 /* End of the compiler section, beginning of the assembler section */
 
@@ -6375,4 +7001,3 @@ PyCode_Optimize(PyObject *code, PyObject* Py_UNUSED(consts),
     Py_INCREF(code);
     return code;
 }
-

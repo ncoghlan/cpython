@@ -30,6 +30,9 @@ extern "C" {
 #define BINARY_TRUE_DIVIDE       27
 #define INPLACE_FLOOR_DIVIDE     28
 #define INPLACE_TRUE_DIVIDE      29
+#define GET_LEN                  30
+#define MATCH_MAPPING            31
+#define MATCH_SEQUENCE           32
 #define RERAISE                  48
 #define WITH_EXCEPT_START        49
 #define GET_AITER                50
@@ -117,6 +120,11 @@ extern "C" {
 #define SET_ADD                 146
 #define MAP_ADD                 147
 #define LOAD_CLASSDEREF         148
+#define GET_INDEX               149
+#define GET_INDEX_END           150
+#define GET_INDEX_SLICE         151
+#define MATCH_CLASS             152
+#define MATCH_KEYS              153
 #define SETUP_ASYNC_WITH        154
 #define FORMAT_VALUE            155
 #define BUILD_CONST_KEY_MAP     156

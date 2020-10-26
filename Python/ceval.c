@@ -858,6 +858,262 @@ _Py_CheckRecursiveCall(PyThreadState *tstate, const char *where)
     return 0;
 }
 
+
+// PEP 634: Structural Pattern Matching
+
+
+static PyObject*
+match_keys(PyThreadState *tstate, PyObject *map, PyObject *keys)
+{
+    // Return a tuple of values corresponding to keys, with error checks for
+    // duplicate/missing keys.
+    assert(PyTuple_CheckExact(keys));
+    Py_ssize_t nkeys = PyTuple_GET_SIZE(keys);
+    if (!nkeys) {
+        // No keys means no items.
+        return PyTuple_New(0);
+    }
+    // We use the two argument form of map.get(key, default) for two reasons:
+    // - Atomically check for a key and get its value without error handling.
+    // - Don't cause key creation or resizing in dict subclasses like
+    //   collections.defaultdict that define __missing__ (or similar).
+    _Py_IDENTIFIER(get);
+    PyObject *get = _PyObject_GetAttrId(map, &PyId_get);
+    if (!get) {
+        return NULL;
+    }
+    PyObject *seen = NULL;
+    PyObject *values = NULL;
+    // dummy = object()
+    PyObject *dummy = _PyObject_CallNoArg((PyObject *)&PyBaseObject_Type);
+    if (!dummy) {
+        goto fail;
+    }
+    seen = PySet_New(NULL);
+    if (!seen) {
+        goto fail;
+    }
+    values = PyTuple_New(nkeys);
+    if (!values) {
+        goto fail;
+    }
+    for (Py_ssize_t i = 0; i < nkeys; i++) {
+        PyObject *key = PyTuple_GET_ITEM(keys, i);
+        if (PySet_Contains(seen, key) || PySet_Add(seen, key)) {
+            if (!_PyErr_Occurred(tstate)) {
+                // Seen it before!
+                _PyErr_Format(tstate, PyExc_ValueError,
+                              "mapping pattern checks duplicate key (%R)", key);
+            }
+            goto fail;
+        }
+        PyObject *value = PyObject_CallFunctionObjArgs(get, key, dummy, NULL);
+        if (!value || value == dummy) {
+            // Key not in map.
+            Py_XDECREF(value);
+            goto fail;
+        }
+        PyTuple_SET_ITEM(values, i, value);
+    }
+    // Success.
+    Py_DECREF(get);
+    Py_DECREF(dummy);
+    Py_DECREF(seen);
+    return values;
+fail:
+    Py_DECREF(get);
+    Py_XDECREF(dummy);
+    Py_XDECREF(seen);
+    Py_XDECREF(values);
+    return NULL;
+}
+
+static PyObject*
+dict_without_keys(PyThreadState *tstate, PyObject *map, PyObject *keys)
+{
+    // copy = dict(map)
+    // for key in keys:
+    //     del copy[key]
+    // return copy
+    PyObject *copy = PyDict_New();
+    if (!copy || PyDict_Update(copy, map)) {
+        Py_XDECREF(copy);
+        return NULL;
+    }
+    // This may seem a bit inefficient, but keys is rarely big enough to
+    // actually impact runtime.
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(keys); i++) {
+        if (PyDict_DelItem(copy, PyTuple_GET_ITEM(keys, i))) {
+            Py_DECREF(copy);
+            return NULL;
+        }
+    }
+    return copy;
+}
+
+static int
+get_match_args(PyThreadState *tstate, PyObject *type, PyObject **match_args,
+               int *match_self)
+{
+    // try:
+    //    match_args = type.__match_args__
+    // except AttributeError:
+    //    match_self = type.__flags__ & _Py_TPFLAGS_MATCH_SELF
+    //    match_args = ()
+    // else:
+    //     match_self = 0
+    //     if match_args.__class__ is list:
+    //         match_args = tuple(match_args)
+    //     elif match_args.__class__ is not tuple:
+    //         raise TypeError
+    *match_args = PyObject_GetAttrString(type, "__match_args__");
+    if (!*match_args) {
+        if (_PyErr_ExceptionMatches(tstate, PyExc_AttributeError)) {
+            _PyErr_Clear(tstate);
+            // _Py_TPFLAGS_MATCH_SELF is only acknowledged if the type does not
+            // define __match_args__. This is natural behavior for subclasses:
+            // it's as if __match_args__ is some "magic" value that is lost as
+            // soon as they redefine it.
+            *match_self = PyType_HasFeature((PyTypeObject*)type,
+                                            _Py_TPFLAGS_MATCH_SELF);
+            *match_args = PyTuple_New(0);
+            return 0;
+        }
+        return 1;
+    }
+    *match_self = 0;
+    if (PyTuple_CheckExact(*match_args)) {
+        return 0;
+    }
+    if (PyList_CheckExact(*match_args)) {
+        Py_SETREF(*match_args, PyList_AsTuple(*match_args));
+        return 0;
+    }
+    const char *e = "%s.__match_args__ must be a list or tuple (got %s)";
+    _PyErr_Format(tstate, PyExc_TypeError, e, ((PyTypeObject *)type)->tp_name,
+                  Py_TYPE(*match_args)->tp_name);
+    Py_CLEAR(*match_args);
+    return 1;
+}
+
+static PyObject*
+match_class_attr(PyThreadState *tstate, PyObject *subject, PyObject *type,
+                 PyObject *name, PyObject *seen)
+{
+    // Extract a named attribute from the subject, with additional bookkeeping
+    // to raise TypeErrors for repeated lookups. On failure, return NULL (with
+    // no error set). Use _PyErr_Occurred(tstate) to disambiguate.
+    assert(PyUnicode_CheckExact(name));
+    // XXX: Why doesn't PySet_CheckExact exist?
+    assert(Py_IS_TYPE(seen, &PySet_Type));
+    if (PySet_Contains(seen, name) || PySet_Add(seen, name)) {
+        if (!_PyErr_Occurred(tstate)) {
+            // Seen it before!
+            _PyErr_Format(tstate, PyExc_TypeError,
+                          "%s() got multiple sub-patterns for attribute %R",
+                          ((PyTypeObject*)type)->tp_name, name);
+        }
+        return NULL;
+    }
+    PyObject *attr = PyObject_GetAttr(subject, name);
+    if (!attr && _PyErr_ExceptionMatches(tstate, PyExc_AttributeError)) {
+        _PyErr_Clear(tstate);
+    }
+    return attr;
+}
+
+static PyObject*
+match_class(PyThreadState *tstate, PyObject *subject, PyObject *type,
+            Py_ssize_t nargs, PyObject *kwargs)
+{
+    // On success (match), return a tuple of extracted attributes. On failure
+    // (no match), return NULL. Use _PyErr_Occurred(tstate) to disambiguate.
+    if (!PyType_Check(type)) {
+        const char *e = "called match pattern must be a type";
+        _PyErr_Format(tstate, PyExc_TypeError, e);
+        return NULL;
+    }
+    assert(PyTuple_CheckExact(kwargs));
+    // First, an isinstance check:
+    if (PyObject_IsInstance(subject, type) <= 0) {
+        return NULL;
+    }
+    // So far so good:
+    PyObject *attrs = PyTuple_New(nargs + PyTuple_GET_SIZE(kwargs));
+    if (!attrs) {
+        return NULL;
+    }
+    PyObject *seen = PySet_New(NULL);
+    if (!seen) {
+        Py_DECREF(attrs);
+        return NULL;
+    }
+    // NOTE: From this point on, goto fail on failure:
+    PyObject *match_args = NULL;
+    // First, the positional subpatterns:
+    if (nargs) {
+        int match_self;
+        if (get_match_args(tstate, type, &match_args, &match_self)) {
+            goto fail;
+        }
+        assert(PyTuple_CheckExact(match_args));
+        // If match_self, no __match_args__:
+        assert(match_self ? !PyTuple_GET_SIZE(match_args) : 1);
+        Py_ssize_t allowed = PyTuple_GET_SIZE(match_args) + match_self;
+        if (allowed < nargs) {
+            const char *plural = (allowed == 1) ? "" : "s";
+            _PyErr_Format(tstate, PyExc_TypeError,
+                          "%s() accepts %d positional sub-pattern%s (%d given)",
+                          ((PyTypeObject*)type)->tp_name,
+                          allowed, plural, nargs);
+            goto fail;
+        }
+        if (match_self) {
+            // Easy. Copy the subject itself, and move on to kwargs.
+            assert(!PyTuple_GET_SIZE(match_args));
+            Py_INCREF(subject);
+            PyTuple_SET_ITEM(attrs, 0, subject);
+        }
+        else {
+            for (Py_ssize_t i = 0; i < nargs; i++) {
+                PyObject *name = PyTuple_GET_ITEM(match_args, i);
+                if (!PyUnicode_CheckExact(name)) {
+                    _PyErr_Format(tstate, PyExc_TypeError,
+                                  "__match_args__ elements must be strings "
+                                  "(got %s)", Py_TYPE(name)->tp_name);
+                    goto fail;
+                }
+                PyObject *attr = match_class_attr(tstate, subject, type, name,
+                                                  seen);
+                if (!attr) {
+                    goto fail;
+                }
+                PyTuple_SET_ITEM(attrs, i, attr);
+            }
+        }
+        Py_CLEAR(match_args);
+    }
+    // Finally, the keyword subpatterns:
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(kwargs); i++) {
+        PyObject *name = PyTuple_GET_ITEM(kwargs, i);
+        PyObject *attr = match_class_attr(tstate, subject, type, name, seen);
+        if (!attr) {
+            goto fail;
+        }
+        PyTuple_SET_ITEM(attrs, nargs + i, attr);
+    }
+    Py_DECREF(seen);
+    return attrs;
+fail:
+    // We really don't care whether an error was raised or not... that's our
+    // caller's problem. All we know is that the match failed.
+    Py_DECREF(attrs);
+    Py_DECREF(seen);
+    Py_XDECREF(match_args);
+    return NULL;
+}
+
+
 static int do_raise(PyThreadState *tstate, PyObject *exc, PyObject *cause);
 static int unpack_iterable(PyThreadState *, PyObject *, int, int, PyObject **);
 
@@ -3505,6 +3761,217 @@ main_loop:
 #else
             DISPATCH();
 #endif
+        }
+
+        case TARGET(GET_LEN): {
+            // PUSH(len(TOS))
+            Py_ssize_t len_i = PyObject_Length(TOP());
+            if (len_i < 0) {
+                goto error;
+            }
+            PyObject *len_o = PyLong_FromSsize_t(len_i);
+            if (!len_o) {
+                goto error;
+            }
+            PUSH(len_o);
+            DISPATCH();
+        }
+
+        case TARGET(MATCH_CLASS): {
+            // On success, replace TOS with True and TOS1 with a tuple of
+            // attributes. On failure, replace TOS with False.
+            PyObject *names = TOP();
+            PyObject *type = SECOND();
+            PyObject *subject = THIRD();
+            assert(PyTuple_CheckExact(names));
+            PyObject *attrs = match_class(tstate, subject, type, oparg, names);
+            if (attrs) {
+                // Success!
+                assert(PyTuple_CheckExact(attrs));
+                Py_DECREF(type);
+                SET_SECOND(attrs);
+            }
+            else if (_PyErr_Occurred(tstate)) {
+                goto error;
+            }
+            Py_DECREF(names);
+            SET_TOP(PyBool_FromLong(!!attrs));
+            DISPATCH();
+        }
+
+        case TARGET(MATCH_MAPPING): {
+            // PUSH(isinstance(TOS, _collections_abc.Mapping))
+            PyObject *subject = TOP();
+            // Fast path for dicts:
+            if (PyDict_Check(subject)) {
+                Py_INCREF(Py_True);
+                PUSH(Py_True);
+                DISPATCH();
+            }
+            // Lazily import _collections_abc.Mapping, and keep it handy on the
+            // PyInterpreterState struct (it gets cleaned up at exit):
+            PyInterpreterState *interp = PyInterpreterState_Get();
+            if (!interp->map_abc) {
+                PyObject *abc = PyImport_ImportModule("_collections_abc");
+                if (!abc) {
+                    goto error;
+                }
+                interp->map_abc = PyObject_GetAttrString(abc, "Mapping");
+                if (!interp->map_abc) {
+                    goto error;
+                }
+            }
+            int match = PyObject_IsInstance(subject, interp->map_abc);
+            if (match < 0) {
+                goto error;
+            }
+            PUSH(PyBool_FromLong(match));
+            DISPATCH();
+        }
+
+        case TARGET(MATCH_SEQUENCE): {
+            // PUSH(isinstance(TOS, _collections_abc.Sequence) and
+            //      not isinstance(TOS, (bytearray, bytes, str)) and
+            //      not hasattr(TOS, "__next__"))
+            PyObject *subject = TOP();
+            // Fast path for lists and tuples:
+            if (PyType_FastSubclass(Py_TYPE(subject),
+                                    Py_TPFLAGS_LIST_SUBCLASS |
+                                    Py_TPFLAGS_TUPLE_SUBCLASS))
+            {
+                Py_INCREF(Py_True);
+                PUSH(Py_True);
+                DISPATCH();
+            }
+            // Bail on some possible Sequences that we intentionally exclude:
+            if (PyType_FastSubclass(Py_TYPE(subject),
+                                    Py_TPFLAGS_BYTES_SUBCLASS |
+                                    Py_TPFLAGS_UNICODE_SUBCLASS) ||
+                PyIter_Check(subject) ||
+                PyByteArray_Check(subject))
+            {
+                Py_INCREF(Py_False);
+                PUSH(Py_False);
+                DISPATCH();
+            }
+            // Lazily import _collections_abc.Sequence, and keep it handy on the
+            // PyInterpreterState struct (it gets cleaned up at exit):
+            PyInterpreterState *interp = PyInterpreterState_Get();
+            if (!interp->seq_abc) {
+                PyObject *abc = PyImport_ImportModule("_collections_abc");
+                if (!abc) {
+                    goto error;
+                }
+                interp->seq_abc = PyObject_GetAttrString(abc, "Sequence");
+                if (!interp->seq_abc) {
+                    goto error;
+                }
+            }
+            int match = PyObject_IsInstance(subject, interp->seq_abc);
+            if (match < 0) {
+                goto error;
+            }
+            PUSH(PyBool_FromLong(match));
+            DISPATCH();
+        }
+
+        case TARGET(MATCH_KEYS): {
+            // Final stage of mapping pattern matches (after Mapping and length
+            // checks): extract the desired values for further destructuring.
+            PyObject *keys = TOP();
+            PyObject *subject = SECOND();
+            assert(PyTuple_CheckExact(keys));
+            PyObject *values = match_keys(tstate, subject, keys);
+            if (!values) {
+                if (_PyErr_Occurred(tstate)) {
+                    goto error;
+                }
+                Py_INCREF(Py_False);
+                PUSH(Py_False);
+                DISPATCH();
+            }
+            // Success!
+            if (oparg) {
+                // If oparg is nonzero, collect the remaining items into a dict
+                // and put it on the stack where the subject used to be:
+                PyObject *rest = dict_without_keys(tstate, subject, keys);
+                if (!rest) {
+                    goto error;
+                }
+                assert(PyDict_CheckExact(rest));
+                SET_SECOND(rest);
+                Py_DECREF(subject);
+            }
+            SET_TOP(values);
+            Py_DECREF(keys);
+            Py_INCREF(Py_True);
+            PUSH(Py_True);
+            DISPATCH();
+        }
+
+        case TARGET(GET_INDEX): {
+            // PUSH(TOS[oparg])
+            PyObject *item = PySequence_GetItem(TOP(), oparg);
+            if (!item) {
+                goto error;
+            }
+            PUSH(item);
+            DISPATCH();
+        }
+
+        case TARGET(GET_INDEX_END): {
+            // PUSH(TOS[TOS1 - 1 - oparg])
+            // NOTE: We can't rely on support for negative indexing!
+            // Although PySequence_GetItem tries to correct negative indexes, we
+            // just use the length we already have at TOS1. In addition to
+            // avoiding tons of redundant __len__ calls, this also handles
+            // length changes during extraction more intuitively.
+            assert(PyLong_CheckExact(SECOND()));
+            Py_ssize_t len = PyLong_AsSsize_t(SECOND());
+            if (len < 0) {
+                goto error;
+            }
+            assert(0 <= len - 1 - oparg);
+            PyObject *item = PySequence_GetItem(TOP(), len - 1 - oparg);
+            if (!item) {
+                goto error;
+            }
+            PUSH(item);
+            DISPATCH();
+        }
+
+        case TARGET(GET_INDEX_SLICE): {
+            // PUSH(list(TOS[oparg & 0xFF: TOS1 - (oparg >> 8)]))
+            // NOTE: We can't rely on support for slicing or negative indexing!
+            // Ditto GET_INDEX_END's length handling.
+            assert(PyLong_CheckExact(SECOND()));
+            Py_ssize_t len = PyLong_AsSsize_t(SECOND());
+            if (len < 0) {
+                goto error;
+            }
+            Py_ssize_t start = oparg & 0xFF;
+            Py_ssize_t size = len - (oparg >> 8) - start;
+            assert(0 <= size);
+            PyObject *slice = PyList_New(size);
+            if (!slice) {
+                goto error;
+            }
+            PyObject *subject = TOP();
+            // NOTE: Fast path for lists and tuples showed no perf improvement,
+            // likely because test_patma's star-unpacking examples are too small
+            // to make a difference. It will be interesting to see if real-world
+            // code commonly uses star-unpacking in patterns with big list/tuple
+            // subjects. A fast path could pay off, if so.
+            for (Py_ssize_t i = 0; i < size; i++) {
+                PyObject *item = PySequence_GetItem(subject, start + i);
+                if (!item) {
+                    Py_DECREF(slice);
+                    goto error;
+                }
+                PyList_SET_ITEM(slice, i, item);
+            }
+            PUSH(slice);
+            DISPATCH();
         }
 
         case TARGET(GET_ITER): {

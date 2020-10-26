@@ -751,6 +751,30 @@ iterations of the loop.
    .. versionadded:: 3.2
 
 
+.. opcode:: GET_LEN
+
+   Push ``len(TOS)`` onto the stack.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: MATCH_MAPPING
+
+   If TOS is an instance of :class:`collections.abc.Mapping`, push ``True`` onto
+   the stack.  Otherwise, push ``False``.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: MATCH_SEQUENCE
+
+   If TOS is an instance of :class:`collections.abc.Sequence`, is not an
+   instance of :class:`str`/:class:`bytes`/:class:`bytearray`, and is not an
+   :term:`iterator`, push ``True`` onto the stack.  Otherwise, push ``False``.
+
+   .. versionadded:: 3.10
+
+
 All of the following opcodes use their arguments.
 
 .. opcode:: STORE_NAME (namei)
@@ -1187,6 +1211,55 @@ All of the following opcodes use their arguments.
    result is pushed on the stack.
 
    .. versionadded:: 3.6
+
+
+.. opcode:: GET_INDEX (i)
+
+   TOS is a sequence.  Push ``TOS[i]`` onto the stack.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: GET_INDEX_END (i)
+
+   TOS is a sequence, and TOS1 is its length.  Push ``TOS[TOS1 - 1 - i]`` onto
+   the stack.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: GET_INDEX_SLICE (i)
+
+   TOS is a sequence, and TOS1 is its length.  Push a list formed from
+   ``TOS[x:TOS1 - 1 - y]`` onto the stack, where *x* is the low byte of *i* and
+   *y* is the high bytes of *i*.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: MATCH_CLASS (count)
+
+   TOS is a tuple of keyword attribute names, TOS1 is the class being matched
+   against, and TOS2 is the match subject. *count* is the number of positional
+   sub-patterns.
+
+   If TOS2 is an instance of TOS1 and has the positional and keyword attributes
+   required by *count* and TOS, replace TOS with ``True`` and TOS1 with a tuple
+   of extracted attributes. Otherwise, replace TOS with ``False``.
+
+   .. versionadded:: 3.10
+
+
+.. opcode:: MATCH_KEYS (copy)
+
+   TOS is a tuple of mapping keys, and TOS1 is the match subject.  If TOS1
+   contains all of the keys in TOS, replace TOS with a tuple containing the
+   corresponding values and push ``True``. Otherwise, push ``False``.
+
+   If *copy* is non-zero, gather remaining items into a :class:`dict` and put it
+   on the stack where the subject used to be.
+
+   .. versionadded:: 3.10
 
 
 .. opcode:: HAVE_ARGUMENT
