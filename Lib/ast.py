@@ -1239,12 +1239,17 @@ class _Unparser(NodeVisitor):
         with self.delimit("(", ")"):
             self.items_view(self.traverse, node.elts)
 
-    unop = {"Invert": "~", "Not": "not", "UAdd": "+", "USub": "-"}
+    unop = {
+        "Invert": "~", "Not": "not",
+        "UAdd": "+", "USub": "-",
+        "QConstraint": "?",
+    }
     unop_precedence = {
         "not": _Precedence.NOT,
         "~": _Precedence.FACTOR,
         "+": _Precedence.FACTOR,
         "-": _Precedence.FACTOR,
+        "?": _Precedence.FACTOR,
     }
 
     def visit_UnaryOp(self, node):

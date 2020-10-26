@@ -233,8 +233,8 @@ or_pattern[expr_ty]:
 closed_pattern[expr_ty]:
     | literal_pattern
     | capture_pattern
+    | constraint_pattern
     | wildcard_pattern
-    | value_pattern
     | group_pattern
     | sequence_pattern
     | mapping_pattern
@@ -253,20 +253,14 @@ signed_number[expr_ty]:
     | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
 
 capture_pattern[expr_ty]:
-    | !"_" name=NAME !('.' | '(' | '=') {
+    | name=NAME !('.' | '(' | '=') {
         _PyPegen_set_expr_context(p, name, Store) }
 
-wildcard_pattern[expr_ty]:
-    | "_" { _Py_Name(CHECK(PyObject*, _PyPegen_new_identifier(p, "_")), Store, EXTRA) }
+constraint_pattern[expr_ty]:
+    | '?' a=primary { _Py_UnaryOp(QConstraint, a, EXTRA) }
 
-value_pattern[expr_ty]:
-    | attr=attr !('.' | '(' | '=') { attr }
-attr[expr_ty]:
-    | value=name_or_attr '.' attr=NAME {
-        _Py_Attribute(value, attr->v.Name.id, Load, EXTRA) }
-name_or_attr[expr_ty]:
-    | attr
-    | NAME
+wildcard_pattern[expr_ty]:
+    | '?' { _Py_Name(CHECK(PyObject*, _PyPegen_new_identifier(p, "?")), Store, EXTRA) }
 
 group_pattern[expr_ty]:
     | '(' pattern=pattern ')' { pattern }
@@ -292,7 +286,7 @@ mapping_pattern[expr_ty]:
 items_pattern[asdl_seq*]:
     | items=','.key_value_pattern+ ','? { items }
 key_value_pattern[KeyValuePair*]:
-    | key=(literal_pattern | value_pattern) ':' value=pattern {
+    | key=(primary | literal_pattern) ':' value=pattern {
         _PyPegen_key_value_pair(p, key, value) }
     | double_star_pattern
 double_star_pattern[KeyValuePair*]:
@@ -306,6 +300,12 @@ class_pattern[expr_ty]:
         _Py_Call(func, NULL, keywords, EXTRA) }
     | func=name_or_attr '(' args=positional_patterns ',' keywords=keyword_patterns ','? ')' {
         _Py_Call(func, args, keywords, EXTRA) }
+attr[expr_ty]:
+    | value=name_or_attr '.' attr=NAME {
+       _Py_Attribute(value, attr->v.Name.id, Load, EXTRA) }
+name_or_attr[expr_ty]:
+    | attr
+    | NAME
 positional_patterns[asdl_expr_seq*]:
     | args[asdl_expr_seq*]=','.pattern+ { args }
 keyword_patterns[asdl_keyword_seq*]:

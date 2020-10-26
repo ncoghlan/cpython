@@ -109,6 +109,8 @@ typedef struct {
     PyObject *Pass_type;
     PyObject *Pow_singleton;
     PyObject *Pow_type;
+    PyObject *QConstraint_singleton;
+    PyObject *QConstraint_type;
     PyObject *RShift_singleton;
     PyObject *RShift_type;
     PyObject *Raise_type;
@@ -364,6 +366,8 @@ void _PyAST_Fini(PyThreadState *tstate)
     Py_CLEAR(state->Pass_type);
     Py_CLEAR(state->Pow_singleton);
     Py_CLEAR(state->Pow_type);
+    Py_CLEAR(state->QConstraint_singleton);
+    Py_CLEAR(state->QConstraint_type);
     Py_CLEAR(state->RShift_singleton);
     Py_CLEAR(state->RShift_type);
     Py_CLEAR(state->Raise_type);
@@ -1768,7 +1772,7 @@ static int init_types(astmodulestate *state)
                                                   NULL);
     if (!state->FloorDiv_singleton) return 0;
     state->unaryop_type = make_type(state, "unaryop", state->AST_type, NULL, 0,
-        "unaryop = Invert | Not | UAdd | USub");
+        "unaryop = Invert | Not | UAdd | USub | QConstraint");
     if (!state->unaryop_type) return 0;
     if (!add_attributes(state, state->unaryop_type, NULL, 0)) return 0;
     state->Invert_type = make_type(state, "Invert", state->unaryop_type, NULL,
@@ -1797,6 +1801,14 @@ static int init_types(astmodulestate *state)
     state->USub_singleton = PyType_GenericNew((PyTypeObject *)state->USub_type,
                                               NULL, NULL);
     if (!state->USub_singleton) return 0;
+    state->QConstraint_type = make_type(state, "QConstraint",
+                                        state->unaryop_type, NULL, 0,
+        "QConstraint");
+    if (!state->QConstraint_type) return 0;
+    state->QConstraint_singleton = PyType_GenericNew((PyTypeObject
+                                                     *)state->QConstraint_type,
+                                                     NULL, NULL);
+    if (!state->QConstraint_singleton) return 0;
     state->cmpop_type = make_type(state, "cmpop", state->AST_type, NULL, 0,
         "cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn");
     if (!state->cmpop_type) return 0;
@@ -4738,6 +4750,9 @@ PyObject* ast2obj_unaryop(astmodulestate *state, unaryop_ty o)
         case USub:
             Py_INCREF(state->USub_singleton);
             return state->USub_singleton;
+        case QConstraint:
+            Py_INCREF(state->QConstraint_singleton);
+            return state->QConstraint_singleton;
     }
     Py_UNREACHABLE();
 }
@@ -9154,6 +9169,14 @@ obj2ast_unaryop(astmodulestate *state, PyObject* obj, unaryop_ty* out, PyArena*
         *out = USub;
         return 0;
     }
+    isinstance = PyObject_IsInstance(obj, state->QConstraint_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = QConstraint;
+        return 0;
+    }
 
     PyErr_Format(PyExc_TypeError, "expected some sort of unaryop, but got %R", obj);
     return 1;
@@ -10502,6 +10525,10 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     Py_INCREF(state->USub_type);
+    if (PyModule_AddObject(m, "QConstraint", state->QConstraint_type) < 0) {
+        return -1;
+    }
+    Py_INCREF(state->QConstraint_type);
     if (PyModule_AddObject(m, "cmpop", state->cmpop_type) < 0) {
         return -1;
     }

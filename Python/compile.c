@@ -5496,7 +5496,6 @@ pattern_helper_load_constant(struct compiler *c, expr_ty p, pattern_context *pc)
 static int
 pattern_helper_store_name(struct compiler *c, identifier n, pattern_context *pc)
 {
-    assert(!_PyUnicode_EqualToASCIIString(n, "_"));
     // Can't assign to the same name twice:
     if (!pc->stores) {
         CHECK(pc->stores = PySet_New(NULL));

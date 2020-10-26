@@ -94,7 +94,7 @@ class TestPatma(unittest.TestCase):
         class A:
             y = 1
         match x:
-            case A.y as z:
+            case ?A.y as z:
                 pass
         self.assertEqual(x, 0)
         self.assertEqual(A.y, 1)
@@ -107,7 +107,7 @@ class TestPatma(unittest.TestCase):
                 z = 0
             case _ as y if y == x and y:
                 z = 1
-            case A.B:
+            case ?A.B:
                 z = 2
         self.assertEqual(A.B, 0)
         self.assertEqual(x, 0)
@@ -1040,7 +1040,7 @@ class TestPatma(unittest.TestCase):
             B = 0
         x = 0
         match x:
-            case A.B:
+            case ?A.B:
                 y = 0
         self.assertEqual(A.B, 0)
         self.assertEqual(x, 0)
@@ -1052,7 +1052,7 @@ class TestPatma(unittest.TestCase):
                 C = 0
         x = 0
         match x:
-            case A.B.C:
+            case ?A.B.C:
                 y = 0
         self.assertEqual(A.B.C, 0)
         self.assertEqual(x, 0)
@@ -1065,9 +1065,9 @@ class TestPatma(unittest.TestCase):
                 D = 1
         x = 1
         match x:
-            case A.B.C:
+            case ?A.B.C:
                 y = 0
-            case A.B.D:
+            case ?A.B.D:
                 y = 1
         self.assertEqual(A.B.C, 0)
         self.assertEqual(A.B.D, 1)
@@ -1081,7 +1081,7 @@ class TestPatma(unittest.TestCase):
                     D = 0
         x = 0
         match x:
-            case A.B.C.D:
+            case ?A.B.C.D:
                 y = 0
         self.assertEqual(A.B.C.D, 0)
         self.assertEqual(x, 0)
@@ -1095,9 +1095,9 @@ class TestPatma(unittest.TestCase):
                     E = 1
         x = 1
         match x:
-            case A.B.C.D:
+            case ?A.B.C.D:
                 y = 0
-            case A.B.C.E:
+            case ?A.B.C.E:
                 y = 1
         self.assertEqual(A.B.C.D, 0)
         self.assertEqual(A.B.C.E, 1)
@@ -1972,11 +1972,11 @@ class TestPatma(unittest.TestCase):
             BLUE = 2
         def f(color):
             match color:
-                case Color.RED:
+                case ?Color.RED:
                     return "I see red!"
-                case Color.GREEN:
+                case ?Color.GREEN:
                     return "Grass is green"
-                case Color.BLUE:
+                case ?Color.BLUE:
                     return "I'm feeling the blues :("
         self.assertEqual(f(Color.RED), "I see red!")
         self.assertEqual(f(Color.GREEN), "Grass is green")
@@ -1998,11 +1998,11 @@ class TestPatma(unittest.TestCase):
             BLUE = 2
         def f(color):
             match color:
-                case Color.RED:
+                case ?Color.RED:
                     return "I see red!"
-                case Color.GREEN:
+                case ?Color.GREEN:
                     return "Grass is green"
-                case Color.BLUE:
+                case ?Color.BLUE:
                     return "I'm feeling the blues :("
         self.assertEqual(f(Color.RED), "I see red!")
         self.assertEqual(f(Color.GREEN), "Grass is green")
@@ -2460,7 +2460,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_244(self):
         self.assert_syntax_error("""
         match ...:
-            case {**_}:
+            case {**?}:
                 pass
         """)
 
@@ -2468,7 +2468,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_245(self):
         self.assert_syntax_error("""
         match ...:
-            case 42 as _:
+            case 42 as ?:
                 pass
         """)
 
