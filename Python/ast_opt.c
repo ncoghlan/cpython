@@ -45,6 +45,8 @@ fold_unaryop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
         case IdCheck:
             // Only the operand can be folded in a constraint pattern
             return 1;
+        default:
+            // Let the compiler know the other enum cases are handled below
     }
 
     if (arg->kind != Constant_kind) {
