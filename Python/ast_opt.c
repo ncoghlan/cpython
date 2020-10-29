@@ -46,7 +46,7 @@ fold_unaryop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
             // Only the operand can be folded in a constraint pattern
             return 1;
         default:
-            // Let the compiler know the other enum cases are handled below
+            ; // Let the compiler know the other enum cases are handled below
     }
 
     if (arg->kind != Constant_kind) {
@@ -833,7 +833,9 @@ astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL_SEQ(astfold_pattern, expr, node_->v.Tuple.elts);
             break;
         case UnaryOp_kind:
-            CALL(astfold_pattern_negative, expr_ty, node_);
+            if (node_->v.UnaryOp.op == USub) {
+                CALL(astfold_pattern_negative, expr_ty, node_);
+            }
             break;
         default:
             Py_UNREACHABLE();
