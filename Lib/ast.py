@@ -1242,26 +1242,28 @@ class _Unparser(NodeVisitor):
     unop = {
         "Invert": "~", "Not": "not",
         "UAdd": "+", "USub": "-",
-        "QConstraint": "?",
+        "IdCheck": "?is",
+        "EqCheck": "?",
     }
-    unop_precedence = {
-        "not": _Precedence.NOT,
-        "~": _Precedence.FACTOR,
-        "+": _Precedence.FACTOR,
-        "-": _Precedence.FACTOR,
-        "?": _Precedence.FACTOR,
+    # Purely symbolic (+, -, ~, ?) operators shouldn't be seperated
+    # from the value they belong to (e.g: +1 instead of + 1)
+    unop_unparse_details = {
+        "not": (_Precedence.NOT, " "),
+        "?is": (_Precedence.FACTOR, " "),
+        "?": (_Precedence.FACTOR, ""),
+        "~": (_Precedence.FACTOR, ""),
+        "+": (_Precedence.FACTOR, ""),
+        "-": (_Precedence.FACTOR, ""),
     }
 
     def visit_UnaryOp(self, node):
         operator = self.unop[node.op.__class__.__name__]
-        operator_precedence = self.unop_precedence[operator]
-        with self.require_parens(operator_precedence, node):
+        precedence, sep = self.unop_unparse_details[operator]
+        with self.require_parens(precedence, node):
             self.write(operator)
-            # factor prefixes (+, -, ~) shouldn't be seperated
-            # from the value they belong, (e.g: +1 instead of + 1)
-            if operator_precedence is not _Precedence.FACTOR:
-                self.write(" ")
-            self.set_precedence(operator_precedence, node.operand)
+            if sep:
+                self.write(sep)
+            self.set_precedence(precedence, node.operand)
             self.traverse(node.operand)
 
     binop = {

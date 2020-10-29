@@ -257,7 +257,14 @@ capture_pattern[expr_ty]:
         _PyPegen_set_expr_context(p, name, Store) }
 
 constraint_pattern[expr_ty]:
-    | '?' a=primary { _Py_UnaryOp(QConstraint, a, EXTRA) }
+    | id_constraint
+    | eq_constraint
+
+id_constraint[expr_ty]:
+    | '?' 'is' a=primary { _Py_UnaryOp(IdCheck, a, EXTRA) }
+
+eq_constraint[expr_ty]:
+    | '?' a=primary { _Py_UnaryOp(EqCheck, a, EXTRA) }
 
 wildcard_pattern[expr_ty]:
     | '?' { _Py_Name(CHECK(PyObject*, _PyPegen_new_identifier(p, "?")), Store, EXTRA) }

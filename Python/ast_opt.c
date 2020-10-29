@@ -40,9 +40,11 @@ fold_unaryop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 {
     expr_ty arg = node->v.UnaryOp.operand;
 
-    if (node->v.UnaryOp.op == QConstraint) {
-        // Only the operand can be folded in a value constraint pattern
-        return 1;
+    switch (node->v.UnaryOp.op) {
+        case EqCheck:
+        case IdCheck:
+            // Only the operand can be folded in a constraint pattern
+            return 1;
     }
 
     if (arg->kind != Constant_kind) {
@@ -86,7 +88,7 @@ fold_unaryop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
         [Not] = unary_not,
         [UAdd] = PyNumber_Positive,
         [USub] = PyNumber_Negative,
-        // QConstraint is excluded by the early return above
+        // Constraints are excluded by the early return above
     };
     PyObject *newval = ops[node->v.UnaryOp.op](arg->v.Constant.value);
     return make_const(node, newval, arena);

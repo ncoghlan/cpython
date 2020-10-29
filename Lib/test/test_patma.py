@@ -570,7 +570,7 @@ class TestPatma(unittest.TestCase):
         x = 0
         y = None
         match x:
-            case None:
+            case ?is None:
                 y = 0
         self.assertEqual(x, 0)
         self.assertIs(y, None)

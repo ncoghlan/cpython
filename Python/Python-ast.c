@@ -43,6 +43,8 @@ typedef struct {
     PyObject *Dict_type;
     PyObject *Div_singleton;
     PyObject *Div_type;
+    PyObject *EqCheck_singleton;
+    PyObject *EqCheck_type;
     PyObject *Eq_singleton;
     PyObject *Eq_type;
     PyObject *ExceptHandler_type;
@@ -60,6 +62,8 @@ typedef struct {
     PyObject *GtE_type;
     PyObject *Gt_singleton;
     PyObject *Gt_type;
+    PyObject *IdCheck_singleton;
+    PyObject *IdCheck_type;
     PyObject *IfExp_type;
     PyObject *If_type;
     PyObject *ImportFrom_type;
@@ -109,8 +113,6 @@ typedef struct {
     PyObject *Pass_type;
     PyObject *Pow_singleton;
     PyObject *Pow_type;
-    PyObject *QConstraint_singleton;
-    PyObject *QConstraint_type;
     PyObject *RShift_singleton;
     PyObject *RShift_type;
     PyObject *Raise_type;
@@ -300,6 +302,8 @@ void _PyAST_Fini(PyThreadState *tstate)
     Py_CLEAR(state->Dict_type);
     Py_CLEAR(state->Div_singleton);
     Py_CLEAR(state->Div_type);
+    Py_CLEAR(state->EqCheck_singleton);
+    Py_CLEAR(state->EqCheck_type);
     Py_CLEAR(state->Eq_singleton);
     Py_CLEAR(state->Eq_type);
     Py_CLEAR(state->ExceptHandler_type);
@@ -317,6 +321,8 @@ void _PyAST_Fini(PyThreadState *tstate)
     Py_CLEAR(state->GtE_type);
     Py_CLEAR(state->Gt_singleton);
     Py_CLEAR(state->Gt_type);
+    Py_CLEAR(state->IdCheck_singleton);
+    Py_CLEAR(state->IdCheck_type);
     Py_CLEAR(state->IfExp_type);
     Py_CLEAR(state->If_type);
     Py_CLEAR(state->ImportFrom_type);
@@ -366,8 +372,6 @@ void _PyAST_Fini(PyThreadState *tstate)
     Py_CLEAR(state->Pass_type);
     Py_CLEAR(state->Pow_singleton);
     Py_CLEAR(state->Pow_type);
-    Py_CLEAR(state->QConstraint_singleton);
-    Py_CLEAR(state->QConstraint_type);
     Py_CLEAR(state->RShift_singleton);
     Py_CLEAR(state->RShift_type);
     Py_CLEAR(state->Raise_type);
@@ -1772,7 +1776,7 @@ static int init_types(astmodulestate *state)
                                                   NULL);
     if (!state->FloorDiv_singleton) return 0;
     state->unaryop_type = make_type(state, "unaryop", state->AST_type, NULL, 0,
-        "unaryop = Invert | Not | UAdd | USub | QConstraint");
+        "unaryop = Invert | Not | UAdd | USub | EqCheck | IdCheck");
     if (!state->unaryop_type) return 0;
     if (!add_attributes(state, state->unaryop_type, NULL, 0)) return 0;
     state->Invert_type = make_type(state, "Invert", state->unaryop_type, NULL,
@@ -1801,14 +1805,22 @@ static int init_types(astmodulestate *state)
     state->USub_singleton = PyType_GenericNew((PyTypeObject *)state->USub_type,
                                               NULL, NULL);
     if (!state->USub_singleton) return 0;
-    state->QConstraint_type = make_type(state, "QConstraint",
-                                        state->unaryop_type, NULL, 0,
-        "QConstraint");
-    if (!state->QConstraint_type) return 0;
-    state->QConstraint_singleton = PyType_GenericNew((PyTypeObject
-                                                     *)state->QConstraint_type,
-                                                     NULL, NULL);
-    if (!state->QConstraint_singleton) return 0;
+    state->EqCheck_type = make_type(state, "EqCheck", state->unaryop_type,
+                                    NULL, 0,
+        "EqCheck");
+    if (!state->EqCheck_type) return 0;
+    state->EqCheck_singleton = PyType_GenericNew((PyTypeObject
+                                                 *)state->EqCheck_type, NULL,
+                                                 NULL);
+    if (!state->EqCheck_singleton) return 0;
+    state->IdCheck_type = make_type(state, "IdCheck", state->unaryop_type,
+                                    NULL, 0,
+        "IdCheck");
+    if (!state->IdCheck_type) return 0;
+    state->IdCheck_singleton = PyType_GenericNew((PyTypeObject
+                                                 *)state->IdCheck_type, NULL,
+                                                 NULL);
+    if (!state->IdCheck_singleton) return 0;
     state->cmpop_type = make_type(state, "cmpop", state->AST_type, NULL, 0,
         "cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn");
     if (!state->cmpop_type) return 0;
@@ -4750,9 +4762,12 @@ PyObject* ast2obj_unaryop(astmodulestate *state, unaryop_ty o)
         case USub:
             Py_INCREF(state->USub_singleton);
             return state->USub_singleton;
-        case QConstraint:
-            Py_INCREF(state->QConstraint_singleton);
-            return state->QConstraint_singleton;
+        case EqCheck:
+            Py_INCREF(state->EqCheck_singleton);
+            return state->EqCheck_singleton;
+        case IdCheck:
+            Py_INCREF(state->IdCheck_singleton);
+            return state->IdCheck_singleton;
     }
     Py_UNREACHABLE();
 }
@@ -9169,12 +9184,20 @@ obj2ast_unaryop(astmodulestate *state, PyObject* obj, unaryop_ty* out, PyArena*
         *out = USub;
         return 0;
     }
-    isinstance = PyObject_IsInstance(obj, state->QConstraint_type);
+    isinstance = PyObject_IsInstance(obj, state->EqCheck_type);
     if (isinstance == -1) {
         return 1;
     }
     if (isinstance) {
-        *out = QConstraint;
+        *out = EqCheck;
+        return 0;
+    }
+    isinstance = PyObject_IsInstance(obj, state->IdCheck_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = IdCheck;
         return 0;
     }
 
@@ -10525,10 +10548,14 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     Py_INCREF(state->USub_type);
-    if (PyModule_AddObject(m, "QConstraint", state->QConstraint_type) < 0) {
+    if (PyModule_AddObject(m, "EqCheck", state->EqCheck_type) < 0) {
         return -1;
     }
-    Py_INCREF(state->QConstraint_type);
+    Py_INCREF(state->EqCheck_type);
+    if (PyModule_AddObject(m, "IdCheck", state->IdCheck_type) < 0) {
+        return -1;
+    }
+    Py_INCREF(state->IdCheck_type);
     if (PyModule_AddObject(m, "cmpop", state->cmpop_type) < 0) {
         return -1;
     }
