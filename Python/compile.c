@@ -5458,7 +5458,7 @@ compiler_slice(struct compiler *c, expr_ty s)
 
 #define WILDCARD_CHECK(N) \
     ((N)->kind == Name_kind && \
-    _PyUnicode_EqualToASCIIString((N)->v.Name.id, "_"))
+    _PyUnicode_EqualToASCIIString((N)->v.Name.id, "?"))
 
 
 static int
@@ -5642,9 +5642,7 @@ compiler_pattern_literal(struct compiler *c, expr_ty p, pattern_context *pc)
     ADDOP(c, DUP_TOP);
     CHECK(pattern_helper_load_constant(c, p, pc));
     PyObject *v = p->v.Constant.value;
-    // Literal True, False, and None are compared by identity. All others use
-    // equality:
-    ADDOP_COMPARE(c, (v == Py_None || PyBool_Check(v)) ? Is : Eq);
+    ADDOP_COMPARE(c, Is);
     return 1;
 }
 
@@ -5943,6 +5941,32 @@ compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
     return 1;
 }
 
+static int
+compiler_pattern_constraint(struct compiler *c, expr_ty p, pattern_context *pc)
+{
+    assert(p->kind == UnaryOp_kind);
+    expr_ty operand = p->v.UnaryOp.operand;
+    switch (p->v.UnaryOp.op) {
+        case EqCheck:
+            // TODO: allow arbitrary primary expressions here
+            if (operand->kind == Attribute_kind) {
+                return compiler_pattern_value(c, operand, pc);
+            }
+            break;
+        case IdCheck:
+            // TODO: allow arbitrary primary expressions here
+            if (operand->kind == Constant_kind) {
+                return compiler_pattern_literal(c, operand, pc);
+            }
+            break;
+        default:
+            // Other unary operators shouldn't make it here, but if
+            // they do, just fail, don't crash out of the interpreter
+            return compiler_error(c, "unrecognised operator in pattern");
+    }
+    return compiler_error(c, "arbitrary constraints are not yet implemented");
+}
+
 
 static int
 compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
@@ -5953,7 +5977,9 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
             return compiler_pattern_value(c, p, pc);
         case BinOp_kind:
             // Because we allow "2+2j", things like "2+2" make it this far:
-            return compiler_error(c, "patterns cannot include operators");
+            return compiler_error(c, "unrecognised operator in pattern");
+        case UnaryOp_kind:
+            return compiler_pattern_constraint(c, p, pc);
         case Call_kind:
             return compiler_pattern_class(c, p, pc);
         case Constant_kind:

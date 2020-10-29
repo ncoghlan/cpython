@@ -1125,7 +1125,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_118(self):
         x = []
         match x:
-            case [*_, _]:
+            case [*_, ?]:
                 y = 0
             case []:
                 y = 1
