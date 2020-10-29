@@ -1125,7 +1125,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_118(self):
         x = []
         match x:
-            case [*_, ?]:
+            case [*?, ?]:
                 y = 0
             case []:
                 y = 1
@@ -1829,7 +1829,7 @@ class TestPatma(unittest.TestCase):
             def __len__(self):
                 return 42
         match Seq():
-            case [*_]:
+            case [*?]:
                 y = 0
         self.assertEqual(y, 0)
 
@@ -1883,7 +1883,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_190(self):
         w = range(1 << 10)
         match w:
-            case [x, y, *_]:
+            case [x, y, *?]:
                 z = 0
         self.assertEqual(w, range(1 << 10))
         self.assertEqual(x, 0)
@@ -1893,7 +1893,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_191(self):
         w = range(1 << 20)
         match w:
-            case (x, y, *_):
+            case (x, y, *?):
                 z = 0
         self.assertEqual(w, range(1 << 20))
         self.assertEqual(x, 0)
@@ -1903,7 +1903,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_192(self):
         w = range(1 << 30)
         match w:
-            case x, y, *_:
+            case x, y, *?:
                 z = 0
         self.assertEqual(w, range(1 << 30))
         self.assertEqual(x, 0)
