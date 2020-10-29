@@ -1654,13 +1654,6 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
             VISIT(st, expr, e->v.Slice.step)
         break;
     case Name_kind:
-        // Don't make "_" a local when used in a pattern:
-        if (st->in_pattern &&
-            e->v.Name.ctx == Store &&
-            _PyUnicode_EqualToASCIIString(e->v.Name.id, "_"))
-        {
-            break;
-        }
         if (!symtable_add_def(st, e->v.Name.id,
                               e->v.Name.ctx == Load ? USE : DEF_LOCAL))
             VISIT_QUIT(st, 0);
