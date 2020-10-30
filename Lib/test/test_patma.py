@@ -552,7 +552,7 @@ class TestPatma(unittest.TestCase):
         x = 0
         y = None
         match x:
-            case False:
+            case ?is False:
                 y = 0
         self.assertEqual(x, 0)
         self.assertEqual(y, None)
@@ -2140,7 +2140,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_209(self):
         def f(w):
             match w:
-                case _:
+                case ?:
                     out = locals()
                     del out["w"]
                     return out
@@ -2215,7 +2215,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_216(self):
         def f():
             match ...:
-                case _:
+                case ?:
                     return locals()
         self.assertEqual(set(f()), set())
 
@@ -2605,7 +2605,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_257(self):
         x = 0
         match x:
-            case False:
+            case ?is False:
                 y = 0
             case 0:
                 y = 1
@@ -2615,7 +2615,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_258(self):
         x = 1
         match x:
-            case True:
+            case ?is True:
                 y = 0
             case 1:
                 y = 1
@@ -2629,7 +2629,7 @@ class TestPatma(unittest.TestCase):
         x = eq = Eq()
         y = None
         match x:
-            case None:
+            case ?is None:
                 y = 0
         self.assertIs(x, eq)
         self.assertEqual(y, None)
@@ -2802,6 +2802,132 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(x, [[{0: 0}]])
         self.assertEqual(y, 0)
         self.assertEqual(z, 0)
+
+@dataclasses.dataclass
+class AttrClass:
+    attr: int
+
+class TestPatmaExtensions(unittest.TestCase):
+    # Test cases for features that PEP 642 allows, but PEP 634 does not
+
+    def test_local_var_eq(self):
+        x = []
+        y = None
+        match x.copy():
+            case ?x:
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_eq_in_or(self):
+        x = []
+        y = None
+        match x.copy():
+            case ?is None | ?x:
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_eq_in_as(self):
+        x = []
+        y = None
+        z = x.copy()
+        match z:
+            case ?x as matched:
+                y = 0
+        self.assertEqual(y, 0)
+        self.assertIsNot(matched, x)
+        self.assertIs(matched, z)
+
+    def test_local_var_eq_in_sequence(self):
+        x = []
+        y = None
+        match [1, x.copy()]:
+            case [?1, ?x]:
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_eq_in_mapping(self):
+        x = []
+        y = None
+        match {1: x.copy()}:
+            case {1: ?x}:
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_eq_in_class(self):
+        x = []
+        y = None
+        match AttrClass(x.copy()):
+            case AttrClass(?x):
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_eq_in_class_by_keyword(self):
+        x = []
+        y = None
+        match AttrClass(x.copy()):
+            case AttrClass(attr=?x):
+                y = 0
+        self.assertEqual(y, 0)
+
+    def test_local_var_id(self):
+        x = []
+        y = None
+        match x.copy():
+            case ?is x:
+                y = 0
+        self.assertIs(y, None)
+
+    def test_local_var_id_in_or(self):
+        x = []
+        y = None
+        match x.copy():
+            case ?is None | ?is x:
+                y = 0
+        self.assertIs(y, None)
+
+    def test_local_var_id_in_as(self):
+        x = []
+        y = None
+        z = x.copy()
+        match z:
+            case ?is x as matched:
+                y = 0
+        self.assertIs(y, None)
+        self.assertNotIn("matched", locals())
+
+    def test_local_var_id_in_sequence(self):
+        x = []
+        y = None
+        match [1, x.copy()]:
+            case [?1, ?is x]:
+                y = 0
+        self.assertIs(y, None)
+
+    def test_local_var_id_in_mapping(self):
+        x = []
+        y = None
+        match {1: x.copy()}:
+            case {1: ?is x}:
+                y = 0
+        self.assertIs(y, None)
+
+    def test_local_var_id_in_class(self):
+        x = []
+        y = None
+        match AttrClass(x.copy()):
+            case AttrClass(?is x):
+                y = 0
+        self.assertIs(y, None)
+
+    def test_local_var_id_in_class_by_keyword(self):
+        x = []
+        y = None
+        match AttrClass(x.copy()):
+            case AttrClass(attr=?is x):
+                y = 0
+        self.assertIs(y, None)
+
+
 
 class PerfPatma(TestPatma):
 

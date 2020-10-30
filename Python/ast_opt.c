@@ -734,6 +734,7 @@ astfold_withitem(withitem_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 static int
 astfold_pattern_negative(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
+    // PEP 642 TODO: Remove when literal patterns are dropped
     assert(node_->kind == UnaryOp_kind);
     assert(node_->v.UnaryOp.op == USub);
     assert(node_->v.UnaryOp.operand->kind == Constant_kind);
@@ -754,6 +755,7 @@ astfold_pattern_negative(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *stat
 static int
 astfold_pattern_complex(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
+    // PEP 642 TODO: Remove when literal patterns are dropped
     expr_ty left = node_->v.BinOp.left;
     expr_ty right = node_->v.BinOp.right;
     if (left->kind == UnaryOp_kind) {
@@ -797,9 +799,8 @@ astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     // Don't blindly optimize the pattern as an expr; it plays by its own rules!
     // Currently, this is only used to form complex/negative numeric constants.
     switch (node_->kind) {
-        case Attribute_kind:
-            break;
         case BinOp_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             CALL(astfold_pattern_complex, expr_ty, node_);
             break;
         case Call_kind:
@@ -807,13 +808,15 @@ astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL_SEQ(astfold_pattern_keyword, keyword, node_->v.Call.keywords);
             break;
         case Constant_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             break;
         case Dict_kind:
-            CALL_SEQ(astfold_pattern, expr, node_->v.Dict.keys);
+            CALL_SEQ(astfold_expr, expr, node_->v.Dict.keys);
             CALL_SEQ(astfold_pattern, expr, node_->v.Dict.values);
             break;
         // Not actually valid, but it's the compiler's job to complain:
         case JoinedStr_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             break;
         case List_kind:
             CALL_SEQ(astfold_pattern, expr, node_->v.List.elts);
@@ -833,6 +836,7 @@ astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL_SEQ(astfold_pattern, expr, node_->v.Tuple.elts);
             break;
         case UnaryOp_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             if (node_->v.UnaryOp.op == USub) {
                 CALL(astfold_pattern_negative, expr_ty, node_);
             }

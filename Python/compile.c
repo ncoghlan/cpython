@@ -5482,6 +5482,7 @@ pattern_helper_load_attr(struct compiler *c, expr_ty p, pattern_context *pc)
 static int
 pattern_helper_load_constant(struct compiler *c, expr_ty p, pattern_context *pc)
 {
+    // PEP 642 TODO: Remove when literal patterns are dropped
     assert(p->kind == Constant_kind);
     assert(p->v.Constant.value == Py_None ||
            PyBool_Check(p->v.Constant.value) ||
@@ -5638,11 +5639,12 @@ compiler_pattern_class(struct compiler *c, expr_ty p, pattern_context *pc)
 static int
 compiler_pattern_literal(struct compiler *c, expr_ty p, pattern_context *pc)
 {
+    // PEP 642 TODO: Remove when literal patterns are dropped
     assert(p->kind == Constant_kind);
     ADDOP(c, DUP_TOP);
     CHECK(pattern_helper_load_constant(c, p, pc));
     PyObject *v = p->v.Constant.value;
-    ADDOP_COMPARE(c, Is);
+    ADDOP_COMPARE(c, Eq);
     return 1;
 }
 
@@ -5691,13 +5693,7 @@ compiler_pattern_mapping(struct compiler *c, expr_ty p, pattern_context *pc)
                             "(consider moving to end)";
             return compiler_error(c, e);
         }
-        if (key->kind == Attribute_kind) {
-            CHECK(pattern_helper_load_attr(c, key, pc));
-        }
-        else {
-            assert(key->kind == Constant_kind);
-            CHECK(pattern_helper_load_constant(c, key, pc));
-        }
+        VISIT(c, expr, key);
     }
     ADDOP_I(c, BUILD_TUPLE, size - star);
     ADDOP_I(c, MATCH_KEYS, star);
@@ -5915,18 +5911,6 @@ compiler_pattern_sequence(struct compiler *c, expr_ty p, pattern_context *pc)
 
 
 static int
-compiler_pattern_value(struct compiler *c, expr_ty p, pattern_context *pc)
-{
-    assert(p->kind == Attribute_kind);
-    assert(p->v.Attribute.ctx == Load);
-    ADDOP(c, DUP_TOP);
-    CHECK(pattern_helper_load_attr(c, p, pc));
-    ADDOP_COMPARE(c, Eq);
-    return 1;
-}
-
-
-static int
 compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
 {
     assert(p->kind == Name_kind);
@@ -5942,22 +5926,25 @@ compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
 }
 
 static int
+compiler_pattern_check(struct compiler *c, expr_ty p, pattern_context *pc, cmpop_ty op)
+{
+    ADDOP(c, DUP_TOP);
+    VISIT(c, expr, p);
+    ADDOP_COMPARE(c, op);
+    return 1;
+}
+
+static int
 compiler_pattern_constraint(struct compiler *c, expr_ty p, pattern_context *pc)
 {
     assert(p->kind == UnaryOp_kind);
     expr_ty operand = p->v.UnaryOp.operand;
     switch (p->v.UnaryOp.op) {
         case EqCheck:
-            // TODO: allow arbitrary primary expressions here
-            if (operand->kind == Attribute_kind) {
-                return compiler_pattern_value(c, operand, pc);
-            }
+            return compiler_pattern_check(c, operand, pc, Eq);
             break;
         case IdCheck:
-            // TODO: allow arbitrary primary expressions here
-            if (operand->kind == Constant_kind) {
-                return compiler_pattern_literal(c, operand, pc);
-            }
+            return compiler_pattern_check(c, operand, pc, Is);
             break;
         default:
             // Other unary operators shouldn't make it here, but if
@@ -5973,9 +5960,8 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
 {
     SET_LOC(c, p);
     switch (p->kind) {
-        case Attribute_kind:
-            return compiler_pattern_value(c, p, pc);
         case BinOp_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             // Because we allow "2+2j", things like "2+2" make it this far:
             return compiler_error(c, "unrecognised operator in pattern");
         case UnaryOp_kind:
@@ -5983,10 +5969,12 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
         case Call_kind:
             return compiler_pattern_class(c, p, pc);
         case Constant_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             return compiler_pattern_literal(c, p, pc);
         case Dict_kind:
             return compiler_pattern_mapping(c, p, pc);
         case JoinedStr_kind:
+            // PEP 642 TODO: Remove when literal patterns are dropped
             // Because we allow strings, f-strings make it this far:
             return compiler_error(c, "patterns cannot include f-strings");
         case List_kind:
