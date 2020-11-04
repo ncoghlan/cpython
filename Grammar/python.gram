@@ -231,29 +231,20 @@ or_pattern[expr_ty]:
     | patterns[asdl_expr_seq*]='|'.closed_pattern+ {
         asdl_seq_LEN(patterns) == 1 ? asdl_seq_GET(patterns, 0) : _Py_MatchOr(patterns, EXTRA) }
 closed_pattern[expr_ty]:
-    | literal_pattern
+    | wildcard_pattern
     | capture_pattern
     | constraint_pattern
-    | wildcard_pattern
+    | inferred_constraint_pattern
     | group_pattern
     | sequence_pattern
     | mapping_pattern
     | class_pattern
 
-literal_pattern[expr_ty]:
-    | signed_number !('+' | '-')
-    | real=signed_number '+' imag=NUMBER { _Py_BinOp(real, Add, imag, EXTRA) }
-    | real=signed_number '-' imag=NUMBER  { _Py_BinOp(real, Sub, imag, EXTRA) }
-    | strings
-    | 'None' { _Py_Constant(Py_None, NULL, EXTRA) }
-    | 'True' { _Py_Constant(Py_True, NULL, EXTRA) }
-    | 'False' { _Py_Constant(Py_False, NULL, EXTRA) }
-signed_number[expr_ty]:
-    | NUMBER
-    | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
+wildcard_pattern[expr_ty]:
+    | "_" { _Py_SkippedBinding(EXTRA) }
 
 capture_pattern[expr_ty]:
-    | name=NAME !('.' | '(' | '=') {
+    | !"_" name=NAME !('.' | '(' | '=') {
         _PyPegen_set_expr_context(p, name, Store) }
 
 constraint_pattern[expr_ty]:
@@ -261,13 +252,45 @@ constraint_pattern[expr_ty]:
     | eq_constraint
 
 id_constraint[expr_ty]:
-    | '?' 'is' a=primary { _Py_UnaryOp(IdCheck, a, EXTRA) }
+    | 'is' e=primary { _Py_UnaryOp(IdCheck, e, EXTRA) }
 
 eq_constraint[expr_ty]:
-    | '?' a=primary { _Py_UnaryOp(EqCheck, a, EXTRA) }
+    | '==' e=primary { _Py_UnaryOp(EqCheck, e, EXTRA) }
 
-wildcard_pattern[expr_ty]:
-    | '?' { _Py_Name(CHECK(PyObject*, _PyPegen_new_identifier(p, "?")), Store, EXTRA) }
+inferred_constraint_pattern[expr_ty]:
+    | e=inferred_id_constraint { _Py_UnaryOp(IdCheck, e, EXTRA) }
+    | e=inferred_eq_constraint { _Py_UnaryOp(EqCheck, e, EXTRA) }
+
+inferred_id_constraint[expr_ty]:
+    | 'None'
+    | '...'
+
+inferred_eq_constraint[expr_ty]:
+    | attr_constraint
+    | literal_constraint
+
+attr_constraint[expr_ty]:
+    | attr !('.' | '(' | '=')
+attr[expr_ty]:
+    | value=name_or_attr '.' attr=NAME {
+       _Py_Attribute(value, attr->v.Name.id, Load, EXTRA) }
+name_or_attr[expr_ty]:
+    | attr
+    | NAME
+
+literal_constraint[expr_ty]:
+    | signed_number !('+' | '-')
+    | real=signed_number '+' imag=NUMBER { _Py_BinOp(real, Add, imag, EXTRA) }
+    | real=signed_number '-' imag=NUMBER  { _Py_BinOp(real, Sub, imag, EXTRA) }
+    | strings
+signed_number[expr_ty]:
+    | NUMBER
+    | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
+
+literal_pattern[expr_ty]:
+    | 'None' { _Py_Constant(Py_None, NULL, EXTRA) }
+    | 'True' { _Py_Constant(Py_True, NULL, EXTRA) }
+    | 'False' { _Py_Constant(Py_False, NULL, EXTRA) }
 
 group_pattern[expr_ty]:
     | '(' pattern=pattern ')' { pattern }
@@ -307,12 +330,6 @@ class_pattern[expr_ty]:
         _Py_Call(func, NULL, keywords, EXTRA) }
     | func=name_or_attr '(' args=positional_patterns ',' keywords=keyword_patterns ','? ')' {
         _Py_Call(func, args, keywords, EXTRA) }
-attr[expr_ty]:
-    | value=name_or_attr '.' attr=NAME {
-       _Py_Attribute(value, attr->v.Name.id, Load, EXTRA) }
-name_or_attr[expr_ty]:
-    | attr
-    | NAME
 positional_patterns[asdl_expr_seq*]:
     | args[asdl_expr_seq*]=','.pattern+ { args }
 keyword_patterns[asdl_keyword_seq*]:
