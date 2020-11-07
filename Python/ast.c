@@ -323,7 +323,7 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
         return 0;
     /* These final cases don't have any checking. */
     case Name_kind:
-        break;
+        return 1;
     }
     PyErr_SetString(PyExc_SystemError, "unexpected expression");
     return 0;
