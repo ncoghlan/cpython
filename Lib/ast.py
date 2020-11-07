@@ -1110,6 +1110,9 @@ class _Unparser(NodeVisitor):
     def visit_Name(self, node):
         self.write(node.id)
 
+    def visit_SkippedBinding(self, node):
+        self.write("_")
+
     def _write_docstring(self, node):
         def esc_char(c):
             if c in ("\n", "\t"):
