@@ -2429,27 +2429,34 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_240(self):
-        self.assert_syntax_error("""
-        match ...:
-            case 0+0:
-                pass
-        """)
+        x = 5321
+        y = None
+        match x:
+            # PEP 642 doesn't currently enforce the use of complex literals
+            case 5300 + 21 as z:
+                y = 0
+        self.assertIs(x, z)
+        self.assertEqual(y, 0)
 
     @no_perf
     def test_patma_241(self):
-        self.assert_syntax_error("""
-        match ...:
-            case f"":
-                pass
-        """)
+        x = ""
+        y = None
+        match x:
+            case f"" as z:
+                y = 0
+        self.assertIs(x, z)
+        self.assertEqual(y, 0)
 
     @no_perf
     def test_patma_242(self):
-        self.assert_syntax_error("""
-        match ...:
-            case f"{x}":
-                pass
-        """)
+        x = "Hello"
+        y = None
+        match x:
+            case f"{x}" as z:
+                y = 0
+        self.assertIs(x, z)
+        self.assertEqual(y, 0)
 
     @no_perf
     def test_patma_243(self):
