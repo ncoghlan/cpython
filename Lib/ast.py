@@ -1249,8 +1249,8 @@ class _Unparser(NodeVisitor):
     # from the value they belong to (e.g: +1 instead of + 1)
     unop_unparse_details = {
         "not": (_Precedence.NOT, " "),
-        "?is": (_Precedence.FACTOR, " "),
-        "?": (_Precedence.FACTOR, ""),
+        "is": (_Precedence.FACTOR, " "),
+        "==": (_Precedence.FACTOR, " "),
         "~": (_Precedence.FACTOR, ""),
         "+": (_Precedence.FACTOR, ""),
         "-": (_Precedence.FACTOR, ""),
