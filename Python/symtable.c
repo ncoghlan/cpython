@@ -240,7 +240,6 @@ symtable_new(void)
         goto fail;
     st->st_cur = NULL;
     st->st_private = NULL;
-    st->in_pattern = 0;
     return st;
  fail:
     PySymtable_Free(st);
@@ -1632,6 +1631,7 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         VISIT_SEQ(st, expr, e->v.JoinedStr.values);
         break;
     case Constant_kind:
+    case SkippedBinding_kind:
         /* Nothing to do here. */
         break;
     /* The following exprs can be assignment targets. */
@@ -1801,11 +1801,7 @@ symtable_visit_withitem(struct symtable *st, withitem_ty item)
 static int
 symtable_visit_match_case(struct symtable *st, match_case_ty m)
 {
-    assert(!st->in_pattern);
-    st->in_pattern = 1;
     VISIT(st, expr, m->pattern);
-    assert(st->in_pattern);
-    st->in_pattern = 0;
     if (m->guard) {
         VISIT(st, expr, m->guard);
     }

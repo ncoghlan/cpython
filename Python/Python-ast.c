@@ -119,6 +119,7 @@ typedef struct {
     PyObject *Return_type;
     PyObject *SetComp_type;
     PyObject *Set_type;
+    PyObject *SkippedBinding_type;
     PyObject *Slice_type;
     PyObject *Starred_type;
     PyObject *Store_singleton;
@@ -378,6 +379,7 @@ void _PyAST_Fini(PyThreadState *tstate)
     Py_CLEAR(state->Return_type);
     Py_CLEAR(state->SetComp_type);
     Py_CLEAR(state->Set_type);
+    Py_CLEAR(state->SkippedBinding_type);
     Py_CLEAR(state->Slice_type);
     Py_CLEAR(state->Starred_type);
     Py_CLEAR(state->Store_singleton);
@@ -1496,6 +1498,7 @@ static int init_types(astmodulestate *state)
         "     | Name(identifier id, expr_context ctx)\n"
         "     | List(expr* elts, expr_context ctx)\n"
         "     | Tuple(expr* elts, expr_context ctx)\n"
+        "     | SkippedBinding\n"
         "     | Slice(expr? lower, expr? upper, expr? step)\n"
         "     | MatchAs(expr pattern, identifier name)\n"
         "     | MatchOr(expr* patterns)");
@@ -1621,6 +1624,10 @@ static int init_types(astmodulestate *state)
                                   Tuple_fields, 2,
         "Tuple(expr* elts, expr_context ctx)");
     if (!state->Tuple_type) return 0;
+    state->SkippedBinding_type = make_type(state, "SkippedBinding",
+                                           state->expr_type, NULL, 0,
+        "SkippedBinding");
+    if (!state->SkippedBinding_type) return 0;
     state->Slice_type = make_type(state, "Slice", state->expr_type,
                                   Slice_fields, 3,
         "Slice(expr? lower, expr? upper, expr? step)");
@@ -3327,6 +3334,22 @@ Tuple(asdl_expr_seq * elts, expr_context_ty ctx, int lineno, int col_offset,
 }
 
 expr_ty
+SkippedBinding(int lineno, int col_offset, int end_lineno, int end_col_offset,
+               PyArena *arena)
+{
+    expr_ty p;
+    p = (expr_ty)PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = SkippedBinding_kind;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+expr_ty
 Slice(expr_ty lower, expr_ty upper, expr_ty step, int lineno, int col_offset,
       int end_lineno, int end_col_offset, PyArena *arena)
 {
@@ -4601,6 +4624,11 @@ ast2obj_expr(astmodulestate *state, void* _o)
             goto failed;
         Py_DECREF(value);
         break;
+    case SkippedBinding_kind:
+        tp = (PyTypeObject *)state->SkippedBinding_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        break;
     case Slice_kind:
         tp = (PyTypeObject *)state->Slice_type;
         result = PyType_GenericNew(tp, NULL, NULL);
@@ -4700,6 +4728,8 @@ PyObject* ast2obj_boolop(astmodulestate *state, boolop_ty o)
             Py_INCREF(state->Or_singleton);
             return state->Or_singleton;
     }
+    PyErr_SetString(PyExc_AssertionError, "Unknown bool op");
+    return NULL;
     Py_UNREACHABLE();
 }
 PyObject* ast2obj_operator(astmodulestate *state, operator_ty o)
@@ -8822,6 +8852,18 @@ obj2ast_expr(astmodulestate *state, PyObject* obj, expr_ty* out, PyArena* arena)
         if (*out == NULL) goto failed;
         return 0;
     }
+    tp = state->SkippedBinding_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+
+        *out = SkippedBinding(lineno, col_offset, end_lineno, end_col_offset,
+                              arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
     tp = state->Slice_type;
     isinstance = PyObject_IsInstance(obj, tp);
     if (isinstance == -1) {
@@ -10432,6 +10474,11 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     Py_INCREF(state->Tuple_type);
+    if (PyModule_AddObject(m, "SkippedBinding", state->SkippedBinding_type) <
+        0) {
+        return -1;
+    }
+    Py_INCREF(state->SkippedBinding_type);
     if (PyModule_AddObject(m, "Slice", state->Slice_type) < 0) {
         return -1;
     }

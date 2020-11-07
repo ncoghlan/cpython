@@ -287,10 +287,6 @@ signed_number[expr_ty]:
     | NUMBER
     | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
 
-literal_pattern[expr_ty]:
-    | 'None' { _Py_Constant(Py_None, NULL, EXTRA) }
-    | 'True' { _Py_Constant(Py_True, NULL, EXTRA) }
-    | 'False' { _Py_Constant(Py_False, NULL, EXTRA) }
 
 group_pattern[expr_ty]:
     | '(' pattern=pattern ')' { pattern }
@@ -316,7 +312,7 @@ mapping_pattern[expr_ty]:
 items_pattern[asdl_seq*]:
     | items=','.key_value_pattern+ ','? { items }
 key_value_pattern[KeyValuePair*]:
-    | key=(primary | literal_pattern) ':' value=pattern {
+    | key=(primary | literal_constraint) ':' value=pattern {
         _PyPegen_key_value_pair(p, key, value) }
     | double_star_pattern
 double_star_pattern[KeyValuePair*]:

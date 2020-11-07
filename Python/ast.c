@@ -317,8 +317,9 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
         PyErr_SetString(PyExc_ValueError,
                         "MatchOr is only valid in match_case patterns");
         return 0;
-    /* This last case doesn't have any checking. */
+    /* These final cases don't have any checking. */
     case Name_kind:
+    case SkippedBinding_kind:
         return 1;
     }
     PyErr_SetString(PyExc_SystemError, "unexpected expression");

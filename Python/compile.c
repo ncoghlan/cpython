@@ -5133,10 +5133,11 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_list(c, e);
     case Tuple_kind:
         return compiler_tuple(c, e);
+    // Remaining nodes can only occur in patterns, which are handled elsewhere.
     case MatchAs_kind:
     case MatchOr_kind:
-        // Can only occur in patterns, which are handled elsewhere.
-        Py_UNREACHABLE();
+    case SkippedBinding_kind:
+        return compiler_error(c, "can't use case pattern subexpression here");
     }
     return 1;
 }
@@ -5478,24 +5479,6 @@ pattern_helper_load_attr(struct compiler *c, expr_ty p, pattern_context *pc)
     return 1;
 }
 
-
-static int
-pattern_helper_load_constant(struct compiler *c, expr_ty p, pattern_context *pc)
-{
-    // PEP 642 TODO: Remove when literal patterns are dropped
-    assert(p->kind == Constant_kind);
-    assert(p->v.Constant.value == Py_None ||
-           PyBool_Check(p->v.Constant.value) ||
-           PyBytes_CheckExact(p->v.Constant.value) ||
-           PyComplex_CheckExact(p->v.Constant.value) ||
-           PyFloat_CheckExact(p->v.Constant.value) ||
-           PyLong_CheckExact(p->v.Constant.value) ||
-           PyUnicode_CheckExact(p->v.Constant.value));
-    ADDOP_LOAD_CONST(c, p->v.Constant.value);
-    return 1;
-}
-
-
 static int
 pattern_helper_store_name(struct compiler *c, identifier n, pattern_context *pc)
 {
@@ -5634,20 +5617,6 @@ compiler_pattern_class(struct compiler *c, expr_ty p, pattern_context *pc)
     ADDOP(c, POP_TOP);
     return 1;
 }
-
-
-static int
-compiler_pattern_literal(struct compiler *c, expr_ty p, pattern_context *pc)
-{
-    // PEP 642 TODO: Remove when literal patterns are dropped
-    assert(p->kind == Constant_kind);
-    ADDOP(c, DUP_TOP);
-    CHECK(pattern_helper_load_constant(c, p, pc));
-    PyObject *v = p->v.Constant.value;
-    ADDOP_COMPARE(c, Eq);
-    return 1;
-}
-
 
 static int
 compiler_pattern_mapping(struct compiler *c, expr_ty p, pattern_context *pc)
@@ -5942,41 +5911,26 @@ compiler_pattern_constraint(struct compiler *c, expr_ty p, pattern_context *pc)
     switch (p->v.UnaryOp.op) {
         case EqCheck:
             return compiler_pattern_check(c, operand, pc, Eq);
-            break;
         case IdCheck:
             return compiler_pattern_check(c, operand, pc, Is);
-            break;
         default:
-            // Other unary operators shouldn't make it here, but if
-            // they do, just fail, don't crash out of the interpreter
+            // AST validator shouldn't let this happen, but if it does,
+            // just fail, don't crash out of the interpreter
             return compiler_error(c, "unrecognised operator in pattern");
     }
-    return compiler_error(c, "arbitrary constraints are not yet implemented");
 }
-
 
 static int
 compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
 {
     SET_LOC(c, p);
     switch (p->kind) {
-        case BinOp_kind:
-            // PEP 642 TODO: Remove when literal patterns are dropped
-            // Because we allow "2+2j", things like "2+2" make it this far:
-            return compiler_error(c, "unrecognised operator in pattern");
         case UnaryOp_kind:
             return compiler_pattern_constraint(c, p, pc);
         case Call_kind:
             return compiler_pattern_class(c, p, pc);
-        case Constant_kind:
-            // PEP 642 TODO: Remove when literal patterns are dropped
-            return compiler_pattern_literal(c, p, pc);
         case Dict_kind:
             return compiler_pattern_mapping(c, p, pc);
-        case JoinedStr_kind:
-            // PEP 642 TODO: Remove when literal patterns are dropped
-            // Because we allow strings, f-strings make it this far:
-            return compiler_error(c, "patterns cannot include f-strings");
         case List_kind:
         case Tuple_kind:
             return compiler_pattern_sequence(c, p, pc);
@@ -5986,9 +5940,13 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
             return compiler_pattern_or(c, p, pc);
         case Name_kind:
             if (WILDCARD_CHECK(p)) {
-                return compiler_pattern_wildcard(c, p, pc);
+                // AST validator shouldn't let this happen, but if it does,
+                // just fail, don't crash out of the interpreter
+                return compiler_error(c, "attempt to bind wildcard pattern in AST");
             }
             return compiler_pattern_capture(c, p, pc);
+        case SkippedBinding_kind:
+            return compiler_pattern_wildcard(c, p, pc);
         default:
             Py_UNREACHABLE();
     }
