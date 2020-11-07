@@ -711,6 +711,15 @@ class _Unparser(NodeVisitor):
         """Append a piece of text"""
         self._source.append(text)
 
+    def peek_last(self):
+        """Return the last code point written to the output (if any)"""
+        last_cp = ""
+        if self._source:
+            last_text = self._source[-1]
+            if last_text:
+                last_cp = last_text[-1]
+        return last_cp
+
     def buffer_writer(self, text):
         self._buffer.append(text)
 
@@ -1254,8 +1263,8 @@ class _Unparser(NodeVisitor):
     # from the value they belong to (e.g: +1 instead of + 1)
     unop_unparse_details = {
         "not": (_Precedence.NOT, " "),
-        "is": (_Precedence.FACTOR, " "),
-        "==": (_Precedence.FACTOR, " "),
+        "is": (_Precedence.ATOM, " "), # Even unary & power ops need parens
+        "==": (_Precedence.ATOM, " "), # Even unary & power ops need parens
         "~": (_Precedence.FACTOR, ""),
         "+": (_Precedence.FACTOR, ""),
         "-": (_Precedence.FACTOR, ""),
@@ -1265,6 +1274,9 @@ class _Unparser(NodeVisitor):
         operator = self.unop[node.op.__class__.__name__]
         precedence, sep = self.unop_unparse_details[operator]
         with self.require_parens(precedence, node):
+            if operator == "==" and self.peek_last() in {"|", ":", "="}:
+                # Need a disambiguating space before the op token
+                self.write(" ")
             self.write(operator)
             if sep:
                 self.write(sep)
