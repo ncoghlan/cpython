@@ -124,7 +124,7 @@ static KeywordToken *reserved_keywords[] = {
 #define attr_constraint_type 1055
 #define attr_type 1056  // Left-recursive
 #define name_or_attr_type 1057  // Left-recursive
-#define literal_constraint_type 1058
+#define numeric_constraint_type 1058
 #define signed_number_type 1059
 #define group_pattern_type 1060
 #define sequence_pattern_type 1061
@@ -497,7 +497,7 @@ static expr_ty inferred_eq_constraint_rule(Parser *p);
 static expr_ty attr_constraint_rule(Parser *p);
 static expr_ty attr_rule(Parser *p);
 static expr_ty name_or_attr_rule(Parser *p);
-static expr_ty literal_constraint_rule(Parser *p);
+static expr_ty numeric_constraint_rule(Parser *p);
 static expr_ty signed_number_rule(Parser *p);
 static expr_ty group_pattern_rule(Parser *p);
 static expr_ty sequence_pattern_rule(Parser *p);
@@ -5914,7 +5914,7 @@ inferred_id_constraint_rule(Parser *p)
     return _res;
 }
 
-// inferred_eq_constraint: attr_constraint | literal_constraint
+// inferred_eq_constraint: attr_constraint | numeric_constraint | strings
 static expr_ty
 inferred_eq_constraint_rule(Parser *p)
 {
@@ -5944,24 +5944,43 @@ inferred_eq_constraint_rule(Parser *p)
         D(fprintf(stderr, "%*c%s inferred_eq_constraint[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "attr_constraint"));
     }
-    { // literal_constraint
+    { // numeric_constraint
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> inferred_eq_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "literal_constraint"));
-        expr_ty literal_constraint_var;
+        D(fprintf(stderr, "%*c> inferred_eq_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "numeric_constraint"));
+        expr_ty numeric_constraint_var;
         if (
-            (literal_constraint_var = literal_constraint_rule(p))  // literal_constraint
+            (numeric_constraint_var = numeric_constraint_rule(p))  // numeric_constraint
         )
         {
-            D(fprintf(stderr, "%*c+ inferred_eq_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "literal_constraint"));
-            _res = literal_constraint_var;
+            D(fprintf(stderr, "%*c+ inferred_eq_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "numeric_constraint"));
+            _res = numeric_constraint_var;
             goto done;
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s inferred_eq_constraint[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "literal_constraint"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "numeric_constraint"));
+    }
+    { // strings
+        if (p->error_indicator) {
+            D(p->level--);
+            return NULL;
+        }
+        D(fprintf(stderr, "%*c> inferred_eq_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "strings"));
+        expr_ty strings_var;
+        if (
+            (strings_var = strings_rule(p))  // strings
+        )
+        {
+            D(fprintf(stderr, "%*c+ inferred_eq_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "strings"));
+            _res = strings_var;
+            goto done;
+        }
+        p->mark = _mark;
+        D(fprintf(stderr, "%*c%s inferred_eq_constraint[%d-%d]: %s failed!\n", p->level, ' ',
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "strings"));
     }
     _res = NULL;
   done:
@@ -6160,13 +6179,12 @@ name_or_attr_rule(Parser *p)
     return _res;
 }
 
-// literal_constraint:
+// numeric_constraint:
 //     | signed_number !('+' | '-')
 //     | signed_number '+' NUMBER
 //     | signed_number '-' NUMBER
-//     | strings
 static expr_ty
-literal_constraint_rule(Parser *p)
+numeric_constraint_rule(Parser *p)
 {
     D(p->level++);
     if (p->error_indicator) {
@@ -6189,7 +6207,7 @@ literal_constraint_rule(Parser *p)
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> literal_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number !('+' | '-')"));
+        D(fprintf(stderr, "%*c> numeric_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number !('+' | '-')"));
         expr_ty signed_number_var;
         if (
             (signed_number_var = signed_number_rule(p))  // signed_number
@@ -6197,12 +6215,12 @@ literal_constraint_rule(Parser *p)
             _PyPegen_lookahead(0, _tmp_55_rule, p)
         )
         {
-            D(fprintf(stderr, "%*c+ literal_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number !('+' | '-')"));
+            D(fprintf(stderr, "%*c+ numeric_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number !('+' | '-')"));
             _res = signed_number_var;
             goto done;
         }
         p->mark = _mark;
-        D(fprintf(stderr, "%*c%s literal_constraint[%d-%d]: %s failed!\n", p->level, ' ',
+        D(fprintf(stderr, "%*c%s numeric_constraint[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "signed_number !('+' | '-')"));
     }
     { // signed_number '+' NUMBER
@@ -6210,7 +6228,7 @@ literal_constraint_rule(Parser *p)
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> literal_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number '+' NUMBER"));
+        D(fprintf(stderr, "%*c> numeric_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number '+' NUMBER"));
         Token * _literal;
         expr_ty imag;
         expr_ty real;
@@ -6222,7 +6240,7 @@ literal_constraint_rule(Parser *p)
             (imag = _PyPegen_number_token(p))  // NUMBER
         )
         {
-            D(fprintf(stderr, "%*c+ literal_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number '+' NUMBER"));
+            D(fprintf(stderr, "%*c+ numeric_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number '+' NUMBER"));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 D(p->level--);
@@ -6241,7 +6259,7 @@ literal_constraint_rule(Parser *p)
             goto done;
         }
         p->mark = _mark;
-        D(fprintf(stderr, "%*c%s literal_constraint[%d-%d]: %s failed!\n", p->level, ' ',
+        D(fprintf(stderr, "%*c%s numeric_constraint[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "signed_number '+' NUMBER"));
     }
     { // signed_number '-' NUMBER
@@ -6249,7 +6267,7 @@ literal_constraint_rule(Parser *p)
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> literal_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number '-' NUMBER"));
+        D(fprintf(stderr, "%*c> numeric_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "signed_number '-' NUMBER"));
         Token * _literal;
         expr_ty imag;
         expr_ty real;
@@ -6261,7 +6279,7 @@ literal_constraint_rule(Parser *p)
             (imag = _PyPegen_number_token(p))  // NUMBER
         )
         {
-            D(fprintf(stderr, "%*c+ literal_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number '-' NUMBER"));
+            D(fprintf(stderr, "%*c+ numeric_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "signed_number '-' NUMBER"));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 D(p->level--);
@@ -6280,27 +6298,8 @@ literal_constraint_rule(Parser *p)
             goto done;
         }
         p->mark = _mark;
-        D(fprintf(stderr, "%*c%s literal_constraint[%d-%d]: %s failed!\n", p->level, ' ',
+        D(fprintf(stderr, "%*c%s numeric_constraint[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "signed_number '-' NUMBER"));
-    }
-    { // strings
-        if (p->error_indicator) {
-            D(p->level--);
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> literal_constraint[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "strings"));
-        expr_ty strings_var;
-        if (
-            (strings_var = strings_rule(p))  // strings
-        )
-        {
-            D(fprintf(stderr, "%*c+ literal_constraint[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "strings"));
-            _res = strings_var;
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s literal_constraint[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "strings"));
     }
     _res = NULL;
   done:
@@ -6687,7 +6686,7 @@ maybe_star_pattern_rule(Parser *p)
     return _res;
 }
 
-// star_pattern: '*' (capture_pattern | wildcard_pattern)
+// star_pattern: '*' (wildcard_pattern | capture_pattern)
 static expr_ty
 star_pattern_rule(Parser *p)
 {
@@ -6707,21 +6706,21 @@ star_pattern_rule(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
-    { // '*' (capture_pattern | wildcard_pattern)
+    { // '*' (wildcard_pattern | capture_pattern)
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> star_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "'*' (capture_pattern | wildcard_pattern)"));
+        D(fprintf(stderr, "%*c> star_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "'*' (wildcard_pattern | capture_pattern)"));
         Token * _literal;
         void *value;
         if (
             (_literal = _PyPegen_expect_token(p, 16))  // token='*'
             &&
-            (value = _tmp_58_rule(p))  // capture_pattern | wildcard_pattern
+            (value = _tmp_58_rule(p))  // wildcard_pattern | capture_pattern
         )
         {
-            D(fprintf(stderr, "%*c+ star_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "'*' (capture_pattern | wildcard_pattern)"));
+            D(fprintf(stderr, "%*c+ star_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "'*' (wildcard_pattern | capture_pattern)"));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 D(p->level--);
@@ -6741,7 +6740,7 @@ star_pattern_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s star_pattern[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "'*' (capture_pattern | wildcard_pattern)"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "'*' (wildcard_pattern | capture_pattern)"));
     }
     _res = NULL;
   done:
@@ -6859,7 +6858,7 @@ items_pattern_rule(Parser *p)
     return _res;
 }
 
-// key_value_pattern: (primary | literal_constraint) ':' pattern | double_star_pattern
+// key_value_pattern: (primary | numeric_constraint) ':' pattern | double_star_pattern
 static KeyValuePair*
 key_value_pattern_rule(Parser *p)
 {
@@ -6870,24 +6869,24 @@ key_value_pattern_rule(Parser *p)
     }
     KeyValuePair* _res = NULL;
     int _mark = p->mark;
-    { // (primary | literal_constraint) ':' pattern
+    { // (primary | numeric_constraint) ':' pattern
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> key_value_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "(primary | literal_constraint) ':' pattern"));
+        D(fprintf(stderr, "%*c> key_value_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "(primary | numeric_constraint) ':' pattern"));
         Token * _literal;
         void *key;
         expr_ty value;
         if (
-            (key = _tmp_61_rule(p))  // primary | literal_constraint
+            (key = _tmp_61_rule(p))  // primary | numeric_constraint
             &&
             (_literal = _PyPegen_expect_token(p, 11))  // token=':'
             &&
             (value = pattern_rule(p))  // pattern
         )
         {
-            D(fprintf(stderr, "%*c+ key_value_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "(primary | literal_constraint) ':' pattern"));
+            D(fprintf(stderr, "%*c+ key_value_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "(primary | numeric_constraint) ':' pattern"));
             _res = _PyPegen_key_value_pair ( p , key , value );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
@@ -6898,7 +6897,7 @@ key_value_pattern_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s key_value_pattern[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "(primary | literal_constraint) ':' pattern"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "(primary | numeric_constraint) ':' pattern"));
     }
     { // double_star_pattern
         if (p->error_indicator) {
@@ -21750,7 +21749,7 @@ _gather_56_rule(Parser *p)
     return _res;
 }
 
-// _tmp_58: capture_pattern | wildcard_pattern
+// _tmp_58: wildcard_pattern | capture_pattern
 static void *
 _tmp_58_rule(Parser *p)
 {
@@ -21761,25 +21760,6 @@ _tmp_58_rule(Parser *p)
     }
     void * _res = NULL;
     int _mark = p->mark;
-    { // capture_pattern
-        if (p->error_indicator) {
-            D(p->level--);
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> _tmp_58[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "capture_pattern"));
-        expr_ty capture_pattern_var;
-        if (
-            (capture_pattern_var = capture_pattern_rule(p))  // capture_pattern
-        )
-        {
-            D(fprintf(stderr, "%*c+ _tmp_58[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "capture_pattern"));
-            _res = capture_pattern_var;
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s _tmp_58[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "capture_pattern"));
-    }
     { // wildcard_pattern
         if (p->error_indicator) {
             D(p->level--);
@@ -21798,6 +21778,25 @@ _tmp_58_rule(Parser *p)
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s _tmp_58[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "wildcard_pattern"));
+    }
+    { // capture_pattern
+        if (p->error_indicator) {
+            D(p->level--);
+            return NULL;
+        }
+        D(fprintf(stderr, "%*c> _tmp_58[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "capture_pattern"));
+        expr_ty capture_pattern_var;
+        if (
+            (capture_pattern_var = capture_pattern_rule(p))  // capture_pattern
+        )
+        {
+            D(fprintf(stderr, "%*c+ _tmp_58[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "capture_pattern"));
+            _res = capture_pattern_var;
+            goto done;
+        }
+        p->mark = _mark;
+        D(fprintf(stderr, "%*c%s _tmp_58[%d-%d]: %s failed!\n", p->level, ' ',
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "capture_pattern"));
     }
     _res = NULL;
   done:
@@ -21919,7 +21918,7 @@ _gather_59_rule(Parser *p)
     return _res;
 }
 
-// _tmp_61: primary | literal_constraint
+// _tmp_61: primary | numeric_constraint
 static void *
 _tmp_61_rule(Parser *p)
 {
@@ -21949,24 +21948,24 @@ _tmp_61_rule(Parser *p)
         D(fprintf(stderr, "%*c%s _tmp_61[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "primary"));
     }
-    { // literal_constraint
+    { // numeric_constraint
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> _tmp_61[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "literal_constraint"));
-        expr_ty literal_constraint_var;
+        D(fprintf(stderr, "%*c> _tmp_61[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "numeric_constraint"));
+        expr_ty numeric_constraint_var;
         if (
-            (literal_constraint_var = literal_constraint_rule(p))  // literal_constraint
+            (numeric_constraint_var = numeric_constraint_rule(p))  // numeric_constraint
         )
         {
-            D(fprintf(stderr, "%*c+ _tmp_61[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "literal_constraint"));
-            _res = literal_constraint_var;
+            D(fprintf(stderr, "%*c+ _tmp_61[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "numeric_constraint"));
+            _res = numeric_constraint_var;
             goto done;
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s _tmp_61[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "literal_constraint"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "numeric_constraint"));
     }
     _res = NULL;
   done:
