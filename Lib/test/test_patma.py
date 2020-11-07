@@ -25,6 +25,7 @@ class Point:
     x: int
     y: int
 
+
 class TestPatma(unittest.TestCase):
 
     def assert_syntax_error(self, code: str):
@@ -97,7 +98,6 @@ class TestPatma(unittest.TestCase):
                 pass
         self.assertEqual(x, 0)
         self.assertEqual(A.y, 1)
-
 
     def test_patma_009(self):
         class A:
@@ -2946,7 +2946,6 @@ class TestPatmaExtensions(unittest.TestCase):
             case [z, is z]:
                 pass
         self.assertIs(x, z)
-        self.assertEqual(y, z)
 
     def test_capture_var_forward_ref_in_eq_check(self):
         x = []

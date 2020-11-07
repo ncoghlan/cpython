@@ -317,10 +317,13 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
         PyErr_SetString(PyExc_ValueError,
                         "MatchOr is only valid in match_case patterns");
         return 0;
+    case SkippedBinding_kind:
+        PyErr_SetString(PyExc_ValueError,
+                        "Skipping name binding is only valid in match_case patterns");
+        return 0;
     /* These final cases don't have any checking. */
     case Name_kind:
-    case SkippedBinding_kind:
-        return 1;
+        break;
     }
     PyErr_SetString(PyExc_SystemError, "unexpected expression");
     return 0;

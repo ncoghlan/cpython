@@ -267,7 +267,8 @@ inferred_id_constraint[expr_ty]:
 
 inferred_eq_constraint[expr_ty]:
     | attr_constraint
-    | literal_constraint
+    | numeric_constraint
+    | strings
 
 attr_constraint[expr_ty]:
     | attr !('.' | '(' | '=')
@@ -278,11 +279,10 @@ name_or_attr[expr_ty]:
     | attr
     | NAME
 
-literal_constraint[expr_ty]:
+numeric_constraint[expr_ty]:
     | signed_number !('+' | '-')
     | real=signed_number '+' imag=NUMBER { _Py_BinOp(real, Add, imag, EXTRA) }
     | real=signed_number '-' imag=NUMBER  { _Py_BinOp(real, Sub, imag, EXTRA) }
-    | strings
 signed_number[expr_ty]:
     | NUMBER
     | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
@@ -303,7 +303,7 @@ maybe_star_pattern[expr_ty]:
     | star_pattern
     | pattern
 star_pattern[expr_ty]:
-    | '*' value=(capture_pattern | wildcard_pattern) {
+    | '*' value=(wildcard_pattern | capture_pattern) {
         _Py_Starred(value, Store, EXTRA) }
 
 mapping_pattern[expr_ty]:
@@ -312,7 +312,7 @@ mapping_pattern[expr_ty]:
 items_pattern[asdl_seq*]:
     | items=','.key_value_pattern+ ','? { items }
 key_value_pattern[KeyValuePair*]:
-    | key=(primary | literal_constraint) ':' value=pattern {
+    | key=(primary | numeric_constraint) ':' value=pattern {
         _PyPegen_key_value_pair(p, key, value) }
     | double_star_pattern
 double_star_pattern[KeyValuePair*]:

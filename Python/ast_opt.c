@@ -580,7 +580,17 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             return make_const(node_, PyBool_FromLong(!state->optimize), ctx_);
         }
         break;
-    default:
+    case NamedExpr_kind:
+        CALL(astfold_expr, expr_ty, node_->v.NamedExpr.value);
+        break;
+    case Constant_kind:
+        // Nothing to optimise
+        break;
+    // These shouldn't happen outside match patterns, but it's up to the
+    // AST validator to complain, not the optimiser
+    case MatchAs_kind:
+    case MatchOr_kind:
+    case SkippedBinding_kind:
         break;
     }
     return 1;
@@ -742,7 +752,6 @@ static int
 astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
     // Don't blindly optimize the pattern as an expr; it plays by its own rules!
-    // Currently, this is only used to form complex/negative numeric constants.
     switch (node_->kind) {
         case Call_kind:
             CALL_SEQ(astfold_pattern, expr, node_->v.Call.args);
@@ -762,6 +771,7 @@ astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL_SEQ(astfold_pattern, expr, node_->v.MatchOr.patterns);
             break;
         case Name_kind:
+        case SkippedBinding_kind:
             break;
         case Starred_kind:
             CALL(astfold_pattern, expr_ty, node_->v.Starred.value);

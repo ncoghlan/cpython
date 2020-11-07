@@ -5447,7 +5447,7 @@ compiler_slice(struct compiler *c, expr_ty s)
 }
 
 
-// PEP 634: Structural Pattern Matching
+// PEP 634, PEP 642: Structural Pattern Matching
 
 // To keep things simple, all compiler_pattern_* routines follow the convention
 // of preserving TOS (the subject for the given pattern) and pushing either True
@@ -5458,9 +5458,7 @@ compiler_slice(struct compiler *c, expr_ty s)
 
 
 #define WILDCARD_CHECK(N) \
-    ((N)->kind == Name_kind && \
-    _PyUnicode_EqualToASCIIString((N)->v.Name.id, "?"))
-
+    ((N)->kind == SkippedBinding_kind)
 
 static int
 pattern_helper_load_attr(struct compiler *c, expr_ty p, pattern_context *pc)
@@ -5536,7 +5534,6 @@ compiler_pattern_capture(struct compiler *c, expr_ty p, pattern_context *pc)
 {
     assert(p->kind == Name_kind);
     assert(p->v.Name.ctx == Store);
-    assert(!WILDCARD_CHECK(p));
     if (!pc->allow_irrefutable) {
         // Whoops, can't have a name capture here!
         const char *e = "name capture %R makes remaining patterns unreachable";
@@ -5882,9 +5879,7 @@ compiler_pattern_sequence(struct compiler *c, expr_ty p, pattern_context *pc)
 static int
 compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
 {
-    assert(p->kind == Name_kind);
-    assert(p->v.Name.ctx == Store);
-    assert(WILDCARD_CHECK(p));
+    assert(p->kind == SkippedBinding_kind);
     if (!pc->allow_irrefutable) {
         // Whoops, can't have a wildcard here!
         const char *e = "wildcard makes remaining patterns unreachable";
@@ -5916,7 +5911,7 @@ compiler_pattern_constraint(struct compiler *c, expr_ty p, pattern_context *pc)
         default:
             // AST validator shouldn't let this happen, but if it does,
             // just fail, don't crash out of the interpreter
-            return compiler_error(c, "unrecognised operator in pattern");
+            return compiler_error(c, "unrecognised unary operator in pattern");
     }
 }
 
@@ -5940,15 +5935,14 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
             return compiler_pattern_or(c, p, pc);
         case Name_kind:
             if (WILDCARD_CHECK(p)) {
-                // AST validator shouldn't let this happen, but if it does,
-                // just fail, don't crash out of the interpreter
-                return compiler_error(c, "attempt to bind wildcard pattern in AST");
             }
             return compiler_pattern_capture(c, p, pc);
         case SkippedBinding_kind:
             return compiler_pattern_wildcard(c, p, pc);
         default:
-            Py_UNREACHABLE();
+            // AST validator shouldn't let this happen, but if it does,
+            // just fail, don't crash out of the interpreter
+            return compiler_error(c, "invalid match pattern node in AST");
     }
 }
 
