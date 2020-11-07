@@ -262,8 +262,8 @@ inferred_constraint_pattern[expr_ty]:
     | e=inferred_eq_constraint { _Py_UnaryOp(EqCheck, e, EXTRA) }
 
 inferred_id_constraint[expr_ty]:
-    | 'None'
-    | '...'
+    | literal_none
+    | literal_ellipsis
 
 inferred_eq_constraint[expr_ty]:
     | attr_constraint
@@ -625,12 +625,18 @@ atom[expr_ty]:
     | NAME
     | 'True' { _Py_Constant(Py_True, NULL, EXTRA) }
     | 'False' { _Py_Constant(Py_False, NULL, EXTRA) }
-    | 'None' { _Py_Constant(Py_None, NULL, EXTRA) }
+    | literal_none
+    | literal_ellipsis
     | &STRING strings
     | NUMBER
     | &'(' (tuple | group | genexp)
     | &'[' (list | listcomp)
     | &'{' (dict | set | dictcomp | setcomp)
+
+literal_none:
+    | 'None' { _Py_Constant(Py_None, NULL, EXTRA) }
+
+literal_ellipsis:
     | '...' { _Py_Constant(Py_Ellipsis, NULL, EXTRA) }
 
 strings[expr_ty] (memo): a=STRING+ { _PyPegen_concatenate_strings(p, a) }

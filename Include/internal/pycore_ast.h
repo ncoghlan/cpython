@@ -47,6 +47,8 @@ struct ast_state {
     PyObject *Dict_type;
     PyObject *Div_singleton;
     PyObject *Div_type;
+    PyObject *EqCheck_singleton;
+    PyObject *EqCheck_type;
     PyObject *Eq_singleton;
     PyObject *Eq_type;
     PyObject *ExceptHandler_type;
@@ -64,6 +66,8 @@ struct ast_state {
     PyObject *GtE_type;
     PyObject *Gt_singleton;
     PyObject *Gt_type;
+    PyObject *IdCheck_singleton;
+    PyObject *IdCheck_type;
     PyObject *IfExp_type;
     PyObject *If_type;
     PyObject *ImportFrom_type;
@@ -91,6 +95,9 @@ struct ast_state {
     PyObject *Lt_type;
     PyObject *MatMult_singleton;
     PyObject *MatMult_type;
+    PyObject *MatchAs_type;
+    PyObject *MatchOr_type;
+    PyObject *Match_type;
     PyObject *Mod_singleton;
     PyObject *Mod_type;
     PyObject *Module_type;
@@ -116,6 +123,7 @@ struct ast_state {
     PyObject *Return_type;
     PyObject *SetComp_type;
     PyObject *Set_type;
+    PyObject *SkippedBinding_type;
     PyObject *Slice_type;
     PyObject *Starred_type;
     PyObject *Store_singleton;
@@ -137,6 +145,7 @@ struct ast_state {
     PyObject *Yield_type;
     PyObject *__dict__;
     PyObject *__doc__;
+    PyObject *__match_args__;
     PyObject *__module__;
     PyObject *_attributes;
     PyObject *_fields;
@@ -153,6 +162,7 @@ struct ast_state {
     PyObject *bases;
     PyObject *body;
     PyObject *boolop_type;
+    PyObject *cases;
     PyObject *cause;
     PyObject *cmpop_type;
     PyObject *col_offset;
@@ -175,6 +185,7 @@ struct ast_state {
     PyObject *format_spec;
     PyObject *func;
     PyObject *generators;
+    PyObject *guard;
     PyObject *handlers;
     PyObject *id;
     PyObject *ifs;
@@ -193,6 +204,7 @@ struct ast_state {
     PyObject *level;
     PyObject *lineno;
     PyObject *lower;
+    PyObject *match_case_type;
     PyObject *mod_type;
     PyObject *module;
     PyObject *msg;
@@ -204,6 +216,8 @@ struct ast_state {
     PyObject *ops;
     PyObject *optional_vars;
     PyObject *orelse;
+    PyObject *pattern;
+    PyObject *patterns;
     PyObject *posonlyargs;
     PyObject *returns;
     PyObject *right;
@@ -211,6 +225,7 @@ struct ast_state {
     PyObject *slice;
     PyObject *step;
     PyObject *stmt_type;
+    PyObject *subject;
     PyObject *tag;
     PyObject *target;
     PyObject *targets;
