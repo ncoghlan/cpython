@@ -1240,12 +1240,14 @@ class _Unparser(NodeVisitor):
             self.items_view(self.traverse, node.elts)
 
     unop = {
-        "Invert": "~", "Not": "not",
-        "UAdd": "+", "USub": "-",
-        "IdCheck": "?is",
-        "EqCheck": "?",
+        "Invert": "~",
+        "Not": "not",
+        "UAdd": "+",
+        "USub": "-",
+        "IdCheck": "is",
+        "EqCheck": "==",
     }
-    # Purely symbolic (+, -, ~, ?) operators shouldn't be seperated
+    # Single symbol (+, -, ~, ?) unary operators shouldn't be separated
     # from the value they belong to (e.g: +1 instead of + 1)
     unop_unparse_details = {
         "not": (_Precedence.NOT, " "),
