@@ -181,8 +181,8 @@ append_ast_unaryop(_PyUnicodeWriter *writer, expr_ty e, int level)
     case Not: op = "not "; pr = PR_NOT; break;
     case UAdd: op = "+"; pr = PR_FACTOR; break;
     case USub: op = "-"; pr = PR_FACTOR; break;
-    case EqCheck: op = "?"; pr = PR_FACTOR; break;
-    case IdCheck: op = "?is"; pr = PR_FACTOR; break;
+    case EqCheck: op = " == "; pr = PR_ATOM; break;
+    case IdCheck: op = "is "; pr = PR_ATOM; break;
     default:
         PyErr_SetString(PyExc_SystemError,
                         "unknown unary operator");
