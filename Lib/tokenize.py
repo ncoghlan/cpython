@@ -223,6 +223,12 @@ class Untokenizer:
         startline = token[0] in (NEWLINE, NL)
         prevstring = False
 
+        # '|==', ':==', and '===' are ambiguous token sequences if spacing
+        # isn't taken into account. When the current token is `==`, we ensure
+        # a space is inserted before it if needed for correct tokenization
+        last_tokval = None
+        need_space_before_eq = {'|', ':', '='}
+
         for tok in _itertools.chain([token], iterable):
             toknum, tokval = tok[:2]
             if toknum == ENCODING:
@@ -232,6 +238,11 @@ class Untokenizer:
             if toknum in (NAME, NUMBER):
                 tokval += ' '
 
+            # Check if we need a disambiguating space
+            if (toknum == OP and tokval == '==' and
+                    last_tokval in need_space_before_eq):
+                tokval = ' ' + tokval
+
             # Insert a space between two consecutive strings
             if toknum == STRING:
                 if prevstring:
@@ -239,6 +250,7 @@ class Untokenizer:
                 prevstring = True
             else:
                 prevstring = False
+
 
             if toknum == INDENT:
                 indents.append(tokval)
@@ -252,6 +264,7 @@ class Untokenizer:
                 toks_append(indents[-1])
                 startline = False
             toks_append(tokval)
+            last_tokval = tokval
 
 
 def untokenize(iterable):
