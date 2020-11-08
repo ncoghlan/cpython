@@ -241,10 +241,10 @@ closed_pattern[expr_ty]:
     | class_pattern
 
 wildcard_pattern[expr_ty]:
-    | "_" { _Py_SkippedBinding(EXTRA) }
+    | "__" { _Py_SkippedBinding(EXTRA) }
 
 capture_pattern[expr_ty]:
-    | !"_" name=NAME !('.' | '(' | '=') {
+    | !"__" name=NAME !('.' | '(' | '=') {
         _PyPegen_set_expr_context(p, name, Store) }
 
 constraint_pattern[expr_ty]:

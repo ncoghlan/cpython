@@ -5128,6 +5128,8 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_slice(c, e);
     case Name_kind:
         return compiler_nameop(c, e->v.Name.id, e->v.Name.ctx);
+    case SkippedBinding_kind:
+        break;
     /* child nodes of List and Tuple will have expr_context set */
     case List_kind:
         return compiler_list(c, e);
@@ -5136,8 +5138,8 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
     // Remaining nodes can only occur in patterns, which are handled elsewhere.
     case MatchAs_kind:
     case MatchOr_kind:
-    case SkippedBinding_kind:
-        return compiler_error(c, "can't use case pattern subexpression here");
+        return compiler_error(c,
+            "can't use match pattern subexpression here");
     }
     return 1;
 }
@@ -5934,8 +5936,6 @@ compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
         case MatchOr_kind:
             return compiler_pattern_or(c, p, pc);
         case Name_kind:
-            if (WILDCARD_CHECK(p)) {
-            }
             return compiler_pattern_capture(c, p, pc);
         case SkippedBinding_kind:
             return compiler_pattern_wildcard(c, p, pc);

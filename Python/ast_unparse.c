@@ -181,7 +181,7 @@ append_ast_unaryop(_PyUnicodeWriter *writer, expr_ty e, int level)
     case Not: op = "not "; pr = PR_NOT; break;
     case UAdd: op = "+"; pr = PR_FACTOR; break;
     case USub: op = "-"; pr = PR_FACTOR; break;
-    case EqCheck: op = " == "; pr = PR_ATOM; break;
+    case EqCheck: op = " == "; pr = PR_ATOM; break; // Leading space avoids ambiguity
     case IdCheck: op = "is "; pr = PR_ATOM; break;
     default:
         PyErr_SetString(PyExc_SystemError,
@@ -909,7 +909,7 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
     case Name_kind:
         return _PyUnicodeWriter_WriteStr(writer, e->v.Name.id);
     case SkippedBinding_kind:
-        return _PyUnicodeWriter_WriteASCIIString(writer, "_", 1);
+        return _PyUnicodeWriter_WriteASCIIString(writer, "__", 2);
     case List_kind:
         return append_ast_list(writer, e);
     case Tuple_kind:

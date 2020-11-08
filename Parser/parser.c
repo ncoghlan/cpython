@@ -5484,7 +5484,7 @@ closed_pattern_rule(Parser *p)
     return _res;
 }
 
-// wildcard_pattern: "_"
+// wildcard_pattern: "__"
 static expr_ty
 wildcard_pattern_rule(Parser *p)
 {
@@ -5504,18 +5504,18 @@ wildcard_pattern_rule(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
-    { // "_"
+    { // "__"
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> wildcard_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "\"_\""));
+        D(fprintf(stderr, "%*c> wildcard_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "\"__\""));
         expr_ty _keyword;
         if (
-            (_keyword = _PyPegen_expect_soft_keyword(p, "_"))  // soft_keyword='"_"'
+            (_keyword = _PyPegen_expect_soft_keyword(p, "__"))  // soft_keyword='"__"'
         )
         {
-            D(fprintf(stderr, "%*c+ wildcard_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "\"_\""));
+            D(fprintf(stderr, "%*c+ wildcard_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "\"__\""));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 D(p->level--);
@@ -5535,7 +5535,7 @@ wildcard_pattern_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s wildcard_pattern[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "\"_\""));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "\"__\""));
     }
     _res = NULL;
   done:
@@ -5543,7 +5543,7 @@ wildcard_pattern_rule(Parser *p)
     return _res;
 }
 
-// capture_pattern: !"_" NAME !('.' | '(' | '=')
+// capture_pattern: !"__" NAME !('.' | '(' | '=')
 static expr_ty
 capture_pattern_rule(Parser *p)
 {
@@ -5554,22 +5554,22 @@ capture_pattern_rule(Parser *p)
     }
     expr_ty _res = NULL;
     int _mark = p->mark;
-    { // !"_" NAME !('.' | '(' | '=')
+    { // !"__" NAME !('.' | '(' | '=')
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> capture_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "!\"_\" NAME !('.' | '(' | '=')"));
+        D(fprintf(stderr, "%*c> capture_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "!\"__\" NAME !('.' | '(' | '=')"));
         expr_ty name;
         if (
-            _PyPegen_lookahead_with_string(0, _PyPegen_expect_soft_keyword, p, "_")
+            _PyPegen_lookahead_with_string(0, _PyPegen_expect_soft_keyword, p, "__")
             &&
             (name = _PyPegen_name_token(p))  // NAME
             &&
             _PyPegen_lookahead(0, _tmp_53_rule, p)
         )
         {
-            D(fprintf(stderr, "%*c+ capture_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "!\"_\" NAME !('.' | '(' | '=')"));
+            D(fprintf(stderr, "%*c+ capture_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "!\"__\" NAME !('.' | '(' | '=')"));
             _res = _PyPegen_set_expr_context ( p , name , Store );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
@@ -5580,7 +5580,7 @@ capture_pattern_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s capture_pattern[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "!\"_\" NAME !('.' | '(' | '=')"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "!\"__\" NAME !('.' | '(' | '=')"));
     }
     _res = NULL;
   done:

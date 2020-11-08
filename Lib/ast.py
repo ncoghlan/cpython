@@ -1120,7 +1120,7 @@ class _Unparser(NodeVisitor):
         self.write(node.id)
 
     def visit_SkippedBinding(self, node):
-        self.write("_")
+        self.write("__")
 
     def _write_docstring(self, node):
         def esc_char(c):

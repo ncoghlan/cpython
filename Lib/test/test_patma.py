@@ -105,7 +105,7 @@ class TestPatma(unittest.TestCase):
         match 0:
             case x if x:
                 z = 0
-            case _ as y if y == x and y:
+            case __ as y if y == x and y:
                 z = 1
             case A.B:
                 z = 2
@@ -1125,7 +1125,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_118(self):
         x = []
         match x:
-            case [*_, _]:
+            case [*__, __]:
                 y = 0
             case []:
                 y = 1
@@ -1269,7 +1269,7 @@ class TestPatma(unittest.TestCase):
                 y = 0
             case {0: 0}:
                 y = 1
-            case {0: _, **z}:
+            case {0: __, **z}:
                 y = 2
         self.assertEqual(x, {0: 1})
         self.assertEqual(y, 2)
@@ -1307,7 +1307,7 @@ class TestPatma(unittest.TestCase):
                 y = 0
             case {0: 0}:
                 y = 0
-            case {0: _, **z}:
+            case {0: __, **z}:
                 y = 1
         self.assertEqual(x, {0: 1})
         self.assertEqual(y, 1)
@@ -1485,7 +1485,7 @@ class TestPatma(unittest.TestCase):
         x = 0
         y = None
         match x:
-            case _ if x:
+            case __ if x:
                 y = 0
         self.assertEqual(x, 0)
         self.assertIs(y, None)
@@ -1527,7 +1527,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case 0:
                 y = 0
-            case _:
+            case __:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -1569,7 +1569,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case 1 if x:
                 y = 0
-            case _:
+            case __:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 1)
@@ -1612,7 +1612,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case z if not z:
                 y = 0
-            case _ if x:
+            case __ if x:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -1621,7 +1621,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_170(self):
         x = 0
         match x:
-            case _ if not x:
+            case __ if not x:
                 y = 0
             case 0:
                 y = 1
@@ -1632,7 +1632,7 @@ class TestPatma(unittest.TestCase):
         x = 0
         y = None
         match x:
-            case _ if x:
+            case __ if x:
                 y = 0
             case 1:
                 y = 1
@@ -1643,7 +1643,7 @@ class TestPatma(unittest.TestCase):
         x = 0
         z = None
         match x:
-            case _ if not x:
+            case __ if not x:
                 y = 0
             case z if not x:
                 y = 1
@@ -1654,9 +1654,9 @@ class TestPatma(unittest.TestCase):
     def test_patma_173(self):
         x = 0
         match x:
-            case _ if not x:
+            case __ if not x:
                 y = 0
-            case _:
+            case __:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -1674,7 +1674,7 @@ class TestPatma(unittest.TestCase):
                     return "Not found"
                 case 418:
                     return "I'm a teapot"
-                case _:
+                case __:
                     return "Something else"
         self.assertEqual(http_error(400), "Bad request")
         self.assertEqual(http_error(401), "Unauthorized")
@@ -1715,7 +1715,7 @@ class TestPatma(unittest.TestCase):
                     return f"X={x}"
                 case (x, y):
                     return f"X={x}, Y={y}"
-                case _:
+                case __:
                     raise ValueError("Not a point")
         self.assertEqual(whereis((0, 0)), "Origin")
         self.assertEqual(whereis((0, -1.0)), "Y=-1.0")
@@ -1735,7 +1735,7 @@ class TestPatma(unittest.TestCase):
                     return f"X={x}"
                 case Point():
                     return "Somewhere else"
-                case _:
+                case __:
                     return "Not a point"
         self.assertEqual(whereis(Point(1, 0)), "X=1")
         self.assertEqual(whereis(Point(0, 0)), "Origin")
@@ -1791,7 +1791,7 @@ class TestPatma(unittest.TestCase):
                     return f"Single point {x}, {y}"
                 case [Point(0, y1), Point(0, y2)]:
                     return f"Two on the Y axis at {y1}, {y2}"
-                case _:
+                case __:
                     return "Something else"
         self.assertEqual(whereis([]), "No points")
         self.assertEqual(whereis([Point(0, 0)]), "The origin")
@@ -1833,7 +1833,7 @@ class TestPatma(unittest.TestCase):
             def __len__(self):
                 return 42
         match Seq():
-            case [*_]:
+            case [*__]:
                 y = 0
         self.assertEqual(y, 0)
 
@@ -1887,7 +1887,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_190(self):
         w = range(1 << 10)
         match w:
-            case [x, y, *_]:
+            case [x, y, *__]:
                 z = 0
         self.assertEqual(w, range(1 << 10))
         self.assertEqual(x, 0)
@@ -1897,7 +1897,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_191(self):
         w = range(1 << 20)
         match w:
-            case (x, y, *_):
+            case (x, y, *__):
                 z = 0
         self.assertEqual(w, range(1 << 20))
         self.assertEqual(x, 0)
@@ -1907,7 +1907,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_192(self):
         w = range(1 << 30)
         match w:
-            case x, y, *_:
+            case x, y, *__:
                 z = 0
         self.assertEqual(w, range(1 << 30))
         self.assertEqual(x, 0)
@@ -2145,7 +2145,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_209(self):
         def f(w):
             match w:
-                case _:
+                case __:
                     out = locals()
                     del out["w"]
                     return out
@@ -2220,7 +2220,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_216(self):
         def f():
             match ...:
-                case _:
+                case __:
                     return locals()
         self.assertEqual(set(f()), set())
 
@@ -2326,7 +2326,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_230(self):
         def f(x):
             match x:
-                case _:
+                case __:
                     return 0
         self.assertEqual(f(0), 0)
         self.assertEqual(f(1), 0)
@@ -2348,7 +2348,7 @@ class TestPatma(unittest.TestCase):
             match x:
                 case 0:
                     return 0
-                case _:
+                case __:
                     return 1
         self.assertEqual(f(0), 0)
         self.assertEqual(f(1), 1)
@@ -2374,7 +2374,7 @@ class TestPatma(unittest.TestCase):
                     return 0
                 case 1:
                     return 1
-                case _:
+                case __:
                     return 2
         self.assertEqual(f(0), 0)
         self.assertEqual(f(1), 1)
@@ -2472,7 +2472,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_244(self):
         self.assert_syntax_error("""
         match ...:
-            case {**_}:
+            case {**__}:
                 pass
         """)
 
@@ -2480,7 +2480,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_245(self):
         self.assert_syntax_error("""
         match ...:
-            case 42 as _:
+            case 42 as __:
                 pass
         """)
 
@@ -2540,7 +2540,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_250(self):
         self.assert_syntax_error("""
         match ...:
-            case Class(a=_, a=_):
+            case Class(a=__, a=__):
                 pass
         """)
 
@@ -2713,7 +2713,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_266(self):
         self.assert_syntax_error("""
         match ...:
-            case _ | _:
+            case __ | __:
                 pass
         """)
 
@@ -2721,7 +2721,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_267(self):
         self.assert_syntax_error("""
         match ...:
-            case (_ as x) | [x]:
+            case (__ as x) | [x]:
                 pass
         """)
 
@@ -2730,7 +2730,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_268(self):
         self.assert_syntax_error("""
         match ...:
-            case _ | _ if condition():
+            case __ | __ if condition():
                 pass
         """)
 
@@ -2739,7 +2739,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_269(self):
         self.assert_syntax_error("""
         match ...:
-            case x | [_ as x] if x:
+            case x | [__ as x] if x:
                 pass
         """)
 
@@ -2747,7 +2747,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_270(self):
         self.assert_syntax_error("""
         match ...:
-            case _:
+            case __:
                 pass
             case None:
                 pass
@@ -2769,7 +2769,7 @@ class TestPatma(unittest.TestCase):
         match ...:
             case x:
                 pass
-            case _:
+            case __:
                 pass
         """)
 
@@ -2777,7 +2777,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_273(self):
         self.assert_syntax_error("""
         match ...:
-            case (None | _) | _:
+            case (None | __) | __:
                 pass
         """)
 
@@ -2785,7 +2785,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_274(self):
         self.assert_syntax_error("""
         match ...:
-            case _ | (True | False):
+            case __ | (True | False):
                 pass
         """)
 
@@ -2989,16 +2989,16 @@ class TestPatmaExtensions(unittest.TestCase):
 
 class PerfPatma(TestPatma):
 
-    def assertEqual(*_, **__):
+    def assertEqual(*args, **kwds):
         pass
 
-    def assertIs(*_, **__):
+    def assertIs(*args, **kwds):
         pass
 
-    def assertRaises(*_, **__):
+    def assertRaises(*args, **kwds):
         assert False, "this test should be decorated with @no_perf!"
 
-    def assertWarns(*_, **__):
+    def assertWarns(*args, **kwds):
         assert False, "this test should be decorated with @no_perf!"
 
     def run_perf(self):
@@ -3007,7 +3007,7 @@ class PerfPatma(TestPatma):
             attr for name, attr in attrs
             if name.startswith("test_") and not hasattr(attr, "no_perf")
         ]
-        for _ in range(1 << 8):
+        for __ in range(1 << 8):
             for test in tests:
                 test(self)
 
