@@ -1598,7 +1598,7 @@ class MockTest(unittest.TestCase):
     #Issue21238
     def test_mock_unsafe(self):
         m = Mock()
-        msg = "Attributes cannot start with 'assert' or its misspellings"
+        msg = "is not a valid assertion. Use a spec for the mock"
         with self.assertRaisesRegex(AttributeError, msg):
             m.assert_foo_call()
         with self.assertRaisesRegex(AttributeError, msg):
@@ -2164,6 +2164,16 @@ class MockTest(unittest.TestCase):
             for mock in mocks:
                 obj = mock(spec=Something)
                 self.assertIsInstance(obj, Something)
+
+    def test_bool_not_called_when_passing_spec_arg(self):
+        class Something:
+            def __init__(self):
+                self.obj_with_bool_func = unittest.mock.MagicMock()
+
+        obj = Something()
+        with unittest.mock.patch.object(obj, 'obj_with_bool_func', autospec=True): pass
+
+        self.assertEqual(obj.obj_with_bool_func.__bool__.call_count, 0)
 
 
 if __name__ == '__main__':
