@@ -5521,6 +5521,10 @@ compiler_pattern_as(struct compiler *c, pattern_ty p, pattern_context *pc)
         compiler_use_next_block(c, end);
     } else {
         // Always save value (equivalent to checking against wildcard pattern)
+        if (!pc->allow_irrefutable) {
+            const char *e = "unconditional capture makes remaining patterns unreachable";
+            return compiler_error(c, e);
+        }
         CHECK(pattern_helper_store_match(c, p->v.MatchAs.target, pc));
     }
     return 1;

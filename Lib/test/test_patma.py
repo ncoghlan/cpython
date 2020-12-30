@@ -2469,7 +2469,6 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_243(self):
-        # PEP 642 TODO: irrefutable clause detection is not working properly
         self.assert_syntax_error("""
         match 42:
             case as x:
@@ -2776,7 +2775,6 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_272(self):
-        # PEP 642 TODO: irrefutable clause detection is not working properly
         self.assert_syntax_error("""
         match ...:
             case as x:
