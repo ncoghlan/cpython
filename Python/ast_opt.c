@@ -419,7 +419,7 @@ static int astfold_keyword(keyword_ty node_, PyArena *ctx_, _PyASTOptimizeState 
 static int astfold_withitem(withitem_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_excepthandler(excepthandler_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_match_case(match_case_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
-static int astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
+static int astfold_pattern(pattern_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 
 #define CALL(FUNC, TYPE, ARG) \
     if (!FUNC((ARG), ctx_, state)) \
@@ -603,13 +603,6 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case Constant_kind:
         // Already a constant, nothing further to do
         break;
-    // These shouldn't happen outside match patterns, but it's up to the
-    // AST validator to complain, not the optimiser
-    case MatchAs_kind:
-    case MatchOr_kind:
-    case SkippedBinding_kind:
-        // Nothing to optimise
-        break;
     // No default case, so the compiler will emit a warning if new expression
     // kinds are added without being handled here
     }
@@ -771,50 +764,36 @@ astfold_withitem(withitem_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 }
 
 static int
-astfold_pattern_keyword(keyword_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
+astfold_pattern(pattern_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
-    CALL(astfold_pattern, expr_ty, node_->value);
-    return 1;
-}
-
-static int
-astfold_pattern(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
-{
-    // Don't blindly optimize the pattern as an expr; it plays by its own rules!
     switch (node_->kind) {
-        case Call_kind:
-            CALL_SEQ(astfold_pattern, expr, node_->v.Call.args);
-            CALL_SEQ(astfold_pattern_keyword, keyword, node_->v.Call.keywords);
-            break;
-        case Dict_kind:
-            CALL_SEQ(astfold_expr, expr, node_->v.Dict.keys);
-            CALL_SEQ(astfold_pattern, expr, node_->v.Dict.values);
-            break;
-        case List_kind:
-            CALL_SEQ(astfold_pattern, expr, node_->v.List.elts);
+        case MatchOr_kind:
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchOr.patterns);
             break;
         case MatchAs_kind:
-            CALL(astfold_pattern, expr_ty, node_->v.MatchAs.pattern);
+            CALL(astfold_pattern, pattern_ty, node_->v.MatchAs.pattern);
             break;
-        case MatchOr_kind:
-            CALL_SEQ(astfold_pattern, expr, node_->v.MatchOr.patterns);
+        case MatchValue_kind:
+            CALL(astfold_expr, expr_ty, node_->v.MatchValue.value);
             break;
-        case Name_kind:
-        case SkippedBinding_kind:
+        case MatchSequence_kind:
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchSequence.patterns);
             break;
-        case Starred_kind:
-            CALL(astfold_pattern, expr_ty, node_->v.Starred.value);
+        case MatchMapping_kind:
+            CALL_SEQ(astfold_expr, expr, node_->v.MatchMapping.keys);
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchMapping.patterns);
             break;
-        case Tuple_kind:
-            CALL_SEQ(astfold_pattern, expr, node_->v.Tuple.elts);
+        case MatchAttrs_kind:
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchAttrs.patterns);
             break;
-        case UnaryOp_kind:
-            // Should only be called with EqCheck or IdCheck as the op,
-            // but that's checked in the AST validator rather than here
-            CALL(astfold_expr, expr_ty, node_);
+        case MatchClass_kind:
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.patterns);
+            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.extra_patterns);
             break;
-        default:
-            Py_UNREACHABLE();
+        case MatchAlways_kind:
+        case MatchRestOfSequence_kind:
+            // No subexpressions or patterns to optimise
+            break;
     }
     return 1;
 }

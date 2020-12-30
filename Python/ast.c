@@ -309,17 +309,8 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
         return validate_exprs(exp->v.Tuple.elts, ctx, 0);
     case NamedExpr_kind:
         return validate_expr(exp->v.NamedExpr.value, Load);
-    case MatchAs_kind:
-        PyErr_SetString(PyExc_ValueError,
-                        "MatchAs is only valid in match_case patterns");
-        return 0;
-    case MatchOr_kind:
-        PyErr_SetString(PyExc_ValueError,
-                        "MatchOr is only valid in match_case patterns");
-        return 0;
     /* These final cases don't have any checking. */
     case Name_kind:
-    case SkippedBinding_kind:
         return 1;
     }
     PyErr_SetString(PyExc_SystemError, "unexpected expression");
@@ -327,7 +318,7 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
 }
 
 static int
-validate_pattern(expr_ty p)
+validate_pattern(pattern_ty p)
 {
     // Coming soon (thanks Batuhan)!
     return 1;

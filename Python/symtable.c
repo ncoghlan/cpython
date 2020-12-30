@@ -193,6 +193,7 @@ static int symtable_enter_block(struct symtable *st, identifier name,
 static int symtable_exit_block(struct symtable *st);
 static int symtable_visit_stmt(struct symtable *st, stmt_ty s);
 static int symtable_visit_expr(struct symtable *st, expr_ty s);
+static int symtable_visit_pattern(struct symtable *st, pattern_ty s);
 static int symtable_visit_genexp(struct symtable *st, expr_ty s);
 static int symtable_visit_listcomp(struct symtable *st, expr_ty s);
 static int symtable_visit_setcomp(struct symtable *st, expr_ty s);
@@ -1631,7 +1632,6 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         VISIT_SEQ(st, expr, e->v.JoinedStr.values);
         break;
     case Constant_kind:
-    case SkippedBinding_kind:
         /* Nothing to do here. */
         break;
     /* The following exprs can be assignment targets. */
@@ -1673,12 +1673,62 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
     case Tuple_kind:
         VISIT_SEQ(st, expr, e->v.Tuple.elts);
         break;
+    }
+    VISIT_QUIT(st, 1);
+}
+
+static int
+symtable_visit_pattern(struct symtable *st, pattern_ty p)
+{
+    if (++st->recursion_depth > st->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+                        "maximum recursion depth exceeded during compilation");
+        VISIT_QUIT(st, 0);
+    }
+    switch (p->kind) {
+    case MatchAlways_kind:
+        /* Nothing to do here. */
+        break;
+    case MatchValue_kind:
+        VISIT(st, expr, p->v.MatchValue.value);
+        break;
+    case MatchSequence_kind:
+        VISIT_SEQ(st, pattern, p->v.MatchSequence.patterns);
+        break;
+    case MatchRestOfSequence_kind:
+        {
+            PyObject *target_name = p->v.MatchRestOfSequence.target;
+            if (target_name) {
+                symtable_add_def(st, target_name, DEF_LOCAL);
+            }
+        } break;
+    case MatchMapping_kind:
+        if (p->v.MatchMapping.keys) {
+            VISIT_SEQ_WITH_NULL(st, expr, p->v.MatchMapping.keys);
+            VISIT_SEQ(st, pattern, p->v.MatchMapping.patterns);
+        }
+        break;
+    case MatchAttrs_kind:
+        VISIT(st, expr, p->v.MatchAttrs.cls);
+        if (p->v.MatchAttrs.patterns) {
+            VISIT_SEQ(st, pattern, p->v.MatchClass.patterns);
+        }
+        break;
+    case MatchClass_kind:
+        VISIT(st, expr, p->v.MatchAttrs.cls);
+        if (p->v.MatchClass.patterns) {
+            VISIT_SEQ(st, pattern, p->v.MatchClass.patterns);
+        }
+        if (p->v.MatchClass.extra_patterns) {
+            VISIT_SEQ(st, pattern, p->v.MatchClass.extra_patterns);
+        }
+        break;
     case MatchAs_kind:
-        VISIT(st, expr, e->v.MatchAs.pattern);
-        symtable_add_def(st, e->v.MatchAs.name, DEF_LOCAL);
+        VISIT(st, pattern, p->v.MatchAs.pattern);
+        symtable_add_def(st, p->v.MatchAs.target, DEF_LOCAL);
         break;
     case MatchOr_kind:
-        VISIT_SEQ(st, expr, e->v.MatchOr.patterns);
+        VISIT_SEQ(st, pattern, p->v.MatchOr.patterns);
         break;
     }
     VISIT_QUIT(st, 1);
@@ -1801,7 +1851,7 @@ symtable_visit_withitem(struct symtable *st, withitem_ty item)
 static int
 symtable_visit_match_case(struct symtable *st, match_case_ty m)
 {
-    VISIT(st, expr, m->pattern);
+    VISIT(st, pattern, m->pattern);
     if (m->guard) {
         VISIT(st, expr, m->guard);
     }

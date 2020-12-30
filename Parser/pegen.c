@@ -1688,7 +1688,7 @@ asdl_pattern_seq *
 _PyPegen_get_patterns(Parser *p, asdl_seq *seq)
 {
     Py_ssize_t len = asdl_seq_LEN(seq);
-    asdl_pattern_seq *new_seq = _Py_asdl_expr_seq_new(len, p->arena);
+    asdl_pattern_seq *new_seq = _Py_asdl_pattern_seq_new(len, p->arena);
     if (!new_seq) {
         return NULL;
     }

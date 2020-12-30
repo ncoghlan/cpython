@@ -1200,9 +1200,6 @@ class _Unparser(NodeVisitor):
     def visit_Name(self, node):
         self.write(node.id)
 
-    def visit_SkippedBinding(self, node):
-        self.write("__")
-
     def _write_docstring(self, node):
         self.fill()
         if node.kind == "u":

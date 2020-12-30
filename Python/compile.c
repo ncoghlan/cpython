@@ -256,7 +256,7 @@ static int compiler_async_comprehension_generator(
                                       int depth,
                                       expr_ty elt, expr_ty val, int type);
 
-static int compiler_pattern(struct compiler *, expr_ty, pattern_context *);
+static int compiler_pattern(struct compiler *, pattern_ty, pattern_context *);
 static int compiler_match(struct compiler *, stmt_ty);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
@@ -5118,18 +5118,11 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_slice(c, e);
     case Name_kind:
         return compiler_nameop(c, e->v.Name.id, e->v.Name.ctx);
-    case SkippedBinding_kind:
-        break;
     /* child nodes of List and Tuple will have expr_context set */
     case List_kind:
         return compiler_list(c, e);
     case Tuple_kind:
         return compiler_tuple(c, e);
-    // Remaining nodes can only occur in patterns, which are handled elsewhere.
-    case MatchAs_kind:
-    case MatchOr_kind:
-        return compiler_error(c,
-            "can't use match pattern subexpression here");
     }
     return 1;
 }
@@ -5450,7 +5443,7 @@ compiler_slice(struct compiler *c, expr_ty s)
 
 
 #define WILDCARD_CHECK(N) \
-    ((N)->kind == SkippedBinding_kind)
+    ((N)->kind == MatchAlways_kind)
 
 static int
 pattern_helper_load_attr(struct compiler *c, expr_ty p, pattern_context *pc)
@@ -5493,7 +5486,7 @@ pattern_helper_store_name(struct compiler *c, identifier n, pattern_context *pc)
 
 
 static int
-compiler_pattern_subpattern(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_subpattern(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
     // Like compiler_pattern, but turn off checks for irrefutability.
     int allow_irrefutable = pc->allow_irrefutable;
@@ -5505,7 +5498,7 @@ compiler_pattern_subpattern(struct compiler *c, expr_ty p, pattern_context *pc)
 
 
 static int
-compiler_pattern_as(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_as(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
     assert(p->kind == MatchAs_kind);
     basicblock *end;
@@ -5514,7 +5507,7 @@ compiler_pattern_as(struct compiler *c, expr_ty p, pattern_context *pc)
     ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
     NEXT_BLOCK(c);
     ADDOP(c, DUP_TOP);
-    CHECK(pattern_helper_store_name(c, p->v.MatchAs.name, pc));
+    CHECK(pattern_helper_store_name(c, p->v.MatchAs.target, pc));
     ADDOP_LOAD_CONST(c, Py_True);
     compiler_use_next_block(c, end);
     return 1;
@@ -5522,25 +5515,9 @@ compiler_pattern_as(struct compiler *c, expr_ty p, pattern_context *pc)
 
 
 static int
-compiler_pattern_capture(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_class(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-    assert(p->kind == Name_kind);
-    assert(p->v.Name.ctx == Store);
-    if (!pc->allow_irrefutable) {
-        // Whoops, can't have a name capture here!
-        const char *e = "name capture %R makes remaining patterns unreachable";
-        return compiler_error(c, e, p->v.Name.id);
-    }
-    ADDOP(c, DUP_TOP);
-    CHECK(pattern_helper_store_name(c, p->v.Name.id, pc));
-    ADDOP_LOAD_CONST(c, Py_True);
-    return 1;
-}
-
-
-static int
-compiler_pattern_class(struct compiler *c, expr_ty p, pattern_context *pc)
-{
+/*
     asdl_expr_seq *args = p->v.Call.args;
     asdl_keyword_seq *kwargs = p->v.Call.keywords;
     Py_ssize_t nargs = asdl_seq_LEN(args);
@@ -5604,12 +5581,14 @@ compiler_pattern_class(struct compiler *c, expr_ty p, pattern_context *pc)
     // attributes beneath it. Pop it, we're done.
     ADDOP(c, ROT_TWO);
     ADDOP(c, POP_TOP);
+*/
     return 1;
 }
 
 static int
-compiler_pattern_mapping(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
+/*
     basicblock *fail, *end;
     CHECK(fail = compiler_new_block(c));
     CHECK(end = compiler_new_block(c));
@@ -5692,12 +5671,13 @@ compiler_pattern_mapping(struct compiler *c, expr_ty p, pattern_context *pc)
     ADDOP(c, POP_TOP);
     ADDOP_LOAD_CONST(c, Py_False);
     compiler_use_next_block(c, end);
+*/
     return 1;
 }
 
 
 static int
-compiler_pattern_or(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_or(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
     assert(p->kind == MatchOr_kind);
     // control is the set of names bound by the first alternative. If all of the
@@ -5712,7 +5692,7 @@ compiler_pattern_or(struct compiler *c, expr_ty p, pattern_context *pc)
     int allow_irrefutable = pc->allow_irrefutable;
     for (Py_ssize_t i = 0; i < size; i++) {
         // NOTE: Can't use our nice returning macros in here: they'll leak sets!
-        expr_ty alt = asdl_seq_GET(p->v.MatchOr.patterns, i);
+        pattern_ty alt = asdl_seq_GET(p->v.MatchOr.patterns, i);
         pc->stores = PySet_New(stores_init);
         // An irrefutable sub-pattern must be last, if it is allowed at all:
         pc->allow_irrefutable = allow_irrefutable && (i == size - 1);
@@ -5762,8 +5742,9 @@ fail:
 
 
 static int
-compiler_pattern_sequence(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_sequence(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
+/*
     assert(p->kind == List_kind || p->kind == Tuple_kind);
     asdl_expr_seq *values = (p->kind == Tuple_kind) ? p->v.Tuple.elts
                                                     : p->v.List.elts;
@@ -5864,14 +5845,15 @@ compiler_pattern_sequence(struct compiler *c, expr_ty p, pattern_context *pc)
     ADDOP(c, POP_TOP);
     ADDOP_LOAD_CONST(c, Py_False);
     compiler_use_next_block(c, end);
+*/
     return 1;
 }
 
 
 static int
-compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_wildcard(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-    assert(p->kind == SkippedBinding_kind);
+    assert(p->kind == MatchAlways_kind);
     if (!pc->allow_irrefutable) {
         // Whoops, can't have a wildcard here!
         const char *e = "wildcard makes remaining patterns unreachable";
@@ -5882,58 +5864,59 @@ compiler_pattern_wildcard(struct compiler *c, expr_ty p, pattern_context *pc)
 }
 
 static int
-compiler_pattern_check(struct compiler *c, expr_ty p, pattern_context *pc, cmpop_ty op)
+compiler_pattern_check(struct compiler *c, expr_ty operand, pattern_context *pc, cmpop_ty op)
 {
     ADDOP(c, DUP_TOP);
-    VISIT(c, expr, p);
+    VISIT(c, expr, operand);
     ADDOP_COMPARE(c, op);
     return 1;
 }
 
 static int
-compiler_pattern_constraint(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern_constraint(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-    assert(p->kind == UnaryOp_kind);
-    expr_ty operand = p->v.UnaryOp.operand;
-    switch (p->v.UnaryOp.op) {
+    assert(p->kind == MatchValue_kind);
+    expr_ty operand = p->v.MatchValue.value;
+    switch (p->v.MatchValue.op) {
         case EqCheck:
             return compiler_pattern_check(c, operand, pc, Eq);
         case IdCheck:
             return compiler_pattern_check(c, operand, pc, Is);
-        default:
-            // AST validator shouldn't let this happen, but if it does,
-            // just fail, don't crash out of the interpreter
-            return compiler_error(c, "unrecognised unary operator in pattern");
+        // No default clause, so compiler complains about unhandled enum values
     }
+    // AST validator shouldn't let this happen, but if it does,
+    // just fail, don't crash out of the interpreter
+    return compiler_error(c, "unrecognised value constraint operator in pattern");
 }
 
 static int
-compiler_pattern(struct compiler *c, expr_ty p, pattern_context *pc)
+compiler_pattern(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
     SET_LOC(c, p);
     switch (p->kind) {
-        case UnaryOp_kind:
+        case MatchValue_kind:
             return compiler_pattern_constraint(c, p, pc);
-        case Call_kind:
-            return compiler_pattern_class(c, p, pc);
-        case Dict_kind:
-            return compiler_pattern_mapping(c, p, pc);
-        case List_kind:
-        case Tuple_kind:
+        case MatchSequence_kind:
             return compiler_pattern_sequence(c, p, pc);
+        case MatchRestOfSequence_kind:
+            return compiler_error(c, "star patterns are only allowed in sequence patterns");
+        case MatchMapping_kind:
+            return compiler_pattern_mapping(c, p, pc);
+        case MatchAttrs_kind:
+            return compiler_pattern_class(c, p, pc);
+        case MatchClass_kind:
+            return compiler_pattern_class(c, p, pc);
         case MatchAs_kind:
             return compiler_pattern_as(c, p, pc);
         case MatchOr_kind:
             return compiler_pattern_or(c, p, pc);
-        case Name_kind:
-            return compiler_pattern_capture(c, p, pc);
-        case SkippedBinding_kind:
+        case MatchAlways_kind:
             return compiler_pattern_wildcard(c, p, pc);
-        default:
-            // AST validator shouldn't let this happen, but if it does,
-            // just fail, don't crash out of the interpreter
-            return compiler_error(c, "invalid match pattern node in AST");
+        // No default clause, so compiler complains about unhandled enum values
     }
+    // AST validator shouldn't let this happen, but if it does,
+    // just fail, don't crash out of the interpreter
+    return compiler_error(c, "invalid match pattern node in AST");
 }
 
 

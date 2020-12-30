@@ -181,8 +181,6 @@ append_ast_unaryop(_PyUnicodeWriter *writer, expr_ty e, int level)
     case Not: op = "not "; pr = PR_NOT; break;
     case UAdd: op = "+"; pr = PR_FACTOR; break;
     case USub: op = "-"; pr = PR_FACTOR; break;
-    case EqCheck: op = " == "; pr = PR_ATOM; break; // Leading space avoids ambiguity
-    case IdCheck: op = "is "; pr = PR_ATOM; break;
     default:
         PyErr_SetString(PyExc_SystemError,
                         "unknown unary operator");
@@ -908,18 +906,12 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
         return append_ast_slice(writer, e);
     case Name_kind:
         return _PyUnicodeWriter_WriteStr(writer, e->v.Name.id);
-    case SkippedBinding_kind:
-        return _PyUnicodeWriter_WriteASCIIString(writer, "__", 2);
     case List_kind:
         return append_ast_list(writer, e);
     case Tuple_kind:
         return append_ast_tuple(writer, e, level);
     case NamedExpr_kind:
         return append_named_expr(writer, e, level);
-    // PEP 642 TODO: These aren't implemented yet...
-    case MatchAs_kind:
-    case MatchOr_kind:
-        break;
     }
     PyErr_SetString(PyExc_SystemError,
                     "unknown expression kind");

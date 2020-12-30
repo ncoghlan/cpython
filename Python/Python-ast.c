@@ -911,7 +911,7 @@ static const char * const pattern_attributes[] = {
 static PyObject* ast2obj_pattern(struct ast_state *state, void*);
 static const char * const MatchValue_fields[]={
     "op",
-    "operand",
+    "value",
 };
 static const char * const MatchSequence_fields[]={
     "patterns",
@@ -1729,7 +1729,7 @@ init_types(struct ast_state *state)
         return 0;
     state->pattern_type = make_type(state, "pattern", state->AST_type, NULL, 0,
         "pattern = MatchAlways\n"
-        "        | MatchValue(matchop op, expr operand)\n"
+        "        | MatchValue(matchop op, expr value)\n"
         "        | MatchSequence(pattern* patterns)\n"
         "        | MatchMapping(expr* keys, pattern* patterns)\n"
         "        | MatchAttrs(expr cls, identifier* attrs, pattern* patterns)\n"
@@ -1752,7 +1752,7 @@ init_types(struct ast_state *state)
     state->MatchValue_type = make_type(state, "MatchValue",
                                        state->pattern_type, MatchValue_fields,
                                        2,
-        "MatchValue(matchop op, expr operand)");
+        "MatchValue(matchop op, expr value)");
     if (!state->MatchValue_type) return 0;
     state->MatchSequence_type = make_type(state, "MatchSequence",
                                           state->pattern_type,
@@ -3522,7 +3522,7 @@ MatchAlways(int lineno, int col_offset, int end_lineno, int end_col_offset,
 }
 
 pattern_ty
-MatchValue(matchop_ty op, expr_ty operand, int lineno, int col_offset, int
+MatchValue(matchop_ty op, expr_ty value, int lineno, int col_offset, int
            end_lineno, int end_col_offset, PyArena *arena)
 {
     pattern_ty p;
@@ -3531,9 +3531,9 @@ MatchValue(matchop_ty op, expr_ty operand, int lineno, int col_offset, int
                         "field 'op' is required for MatchValue");
         return NULL;
     }
-    if (!operand) {
+    if (!value) {
         PyErr_SetString(PyExc_ValueError,
-                        "field 'operand' is required for MatchValue");
+                        "field 'value' is required for MatchValue");
         return NULL;
     }
     p = (pattern_ty)PyArena_Malloc(arena, sizeof(*p));
@@ -3541,7 +3541,7 @@ MatchValue(matchop_ty op, expr_ty operand, int lineno, int col_offset, int
         return NULL;
     p->kind = MatchValue_kind;
     p->v.MatchValue.op = op;
-    p->v.MatchValue.operand = operand;
+    p->v.MatchValue.value = value;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -4981,9 +4981,9 @@ ast2obj_pattern(struct ast_state *state, void* _o)
         if (PyObject_SetAttr(result, state->op, value) == -1)
             goto failed;
         Py_DECREF(value);
-        value = ast2obj_expr(state, o->v.MatchValue.operand);
+        value = ast2obj_expr(state, o->v.MatchValue.value);
         if (!value) goto failed;
-        if (PyObject_SetAttr(result, state->operand, value) == -1)
+        if (PyObject_SetAttr(result, state->value, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -9433,7 +9433,7 @@ obj2ast_pattern(struct ast_state *state, PyObject* obj, pattern_ty* out,
     }
     if (isinstance) {
         matchop_ty op;
-        expr_ty operand;
+        expr_ty value;
 
         if (_PyObject_LookupAttr(obj, state->op, &tmp) < 0) {
             return 1;
@@ -9448,20 +9448,20 @@ obj2ast_pattern(struct ast_state *state, PyObject* obj, pattern_ty* out,
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        if (_PyObject_LookupAttr(obj, state->operand, &tmp) < 0) {
+        if (_PyObject_LookupAttr(obj, state->value, &tmp) < 0) {
             return 1;
         }
         if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"operand\" missing from MatchValue");
+            PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from MatchValue");
             return 1;
         }
         else {
             int res;
-            res = obj2ast_expr(state, tmp, &operand, arena);
+            res = obj2ast_expr(state, tmp, &value, arena);
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = MatchValue(op, operand, lineno, col_offset, end_lineno,
+        *out = MatchValue(op, value, lineno, col_offset, end_lineno,
                           end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;

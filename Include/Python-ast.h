@@ -497,7 +497,7 @@ struct _pattern {
     union {
         struct {
             matchop_ty op;
-            expr_ty operand;
+            expr_ty value;
         } MatchValue;
 
         struct {
@@ -838,7 +838,7 @@ expr_ty _Py_Slice(expr_ty lower, expr_ty upper, expr_ty step, int lineno, int
 pattern_ty _Py_MatchAlways(int lineno, int col_offset, int end_lineno, int
                            end_col_offset, PyArena *arena);
 #define MatchValue(a0, a1, a2, a3, a4, a5, a6) _Py_MatchValue(a0, a1, a2, a3, a4, a5, a6)
-pattern_ty _Py_MatchValue(matchop_ty op, expr_ty operand, int lineno, int
+pattern_ty _Py_MatchValue(matchop_ty op, expr_ty value, int lineno, int
                           col_offset, int end_lineno, int end_col_offset,
                           PyArena *arena);
 #define MatchSequence(a0, a1, a2, a3, a4, a5) _Py_MatchSequence(a0, a1, a2, a3, a4, a5)

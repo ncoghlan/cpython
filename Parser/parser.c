@@ -6138,9 +6138,9 @@ sequence_constraint_elements_rule(Parser *p)
         D(fprintf(stderr, "%*c> sequence_constraint_elements[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "','.sequence_constraint_element+ ','?"));
         void *_opt_var;
         UNUSED(_opt_var); // Silence compiler warnings
-        asdl_seq * items;
+        asdl_pattern_seq* items;
         if (
-            (items = _gather_54_rule(p))  // ','.sequence_constraint_element+
+            (items = (asdl_pattern_seq*)_gather_54_rule(p))  // ','.sequence_constraint_element+
             &&
             (_opt_var = _PyPegen_expect_token(p, 12), 1)  // ','?
         )

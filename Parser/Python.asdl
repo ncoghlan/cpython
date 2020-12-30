@@ -95,7 +95,7 @@ module Python
           attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
 
     pattern = MatchAlways
-         | MatchValue(matchop op, expr operand)
+         | MatchValue(matchop op, expr value)
          | MatchSequence(pattern* patterns)
          | MatchMapping(expr* keys, pattern* patterns)
          | MatchAttrs(expr cls, identifier* attrs, pattern* patterns)
