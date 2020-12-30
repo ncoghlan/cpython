@@ -87,6 +87,11 @@ typedef struct {
 } KeyValuePair;
 
 typedef struct {
+    expr_ty key;
+    pattern_ty pattern;
+} KeyPatternPair;
+
+typedef struct {
     arg_ty arg;
     expr_ty value;
 } NameDefaultPair;

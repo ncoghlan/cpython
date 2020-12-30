@@ -213,125 +213,158 @@ subject_expr[expr_ty]:
         _Py_Tuple(CHECK(asdl_expr_seq*, _PyPegen_seq_insert_in_front(p, value, values)), Load, EXTRA) }
     | named_expression
 case_block[match_case_ty]:
-    | "case" pattern=patterns guard=guard? ':' body=block {
+    | "case" pattern=closed_pattern 'if' guard=named_expression ':' body=block {
         _Py_match_case(pattern, guard, body, p->arena) }
-guard[expr_ty]: 'if' guard=named_expression { guard }
+    | "case" pattern=open_pattern ':' body=block {
+        _Py_match_case(pattern, NULL, body, p->arena) }
 
-patterns[expr_ty]:
-    | values[asdl_expr_seq*]=open_sequence_pattern {
-        _Py_Tuple(values, Load, EXTRA) }
-    | pattern
-pattern[expr_ty]:
+open_pattern[pattern_ty]: # Pattern may use multiple tokens with no closing delimiter
     | as_pattern
     | or_pattern
-as_pattern[expr_ty]:
-    | pattern=or_pattern 'as' target=capture_pattern {
+
+as_pattern[pattern_ty]:
+    | pattern=closed_pattern? target=pattern_as_clause {
         _Py_MatchAs(pattern, target->v.Name.id, EXTRA) }
-or_pattern[expr_ty]:
-    | patterns[asdl_expr_seq*]='|'.closed_pattern+ {
-        asdl_seq_LEN(patterns) == 1 ? asdl_seq_GET(patterns, 0) : _Py_MatchOr(patterns, EXTRA) }
-closed_pattern[expr_ty]:
-    | wildcard_pattern
-    | capture_pattern
-    | constraint_pattern
-    | inferred_constraint_pattern
-    | group_pattern
-    | sequence_pattern
-    | mapping_pattern
-    | class_pattern
 
-wildcard_pattern[expr_ty]:
-    | "__" { _Py_SkippedBinding(EXTRA) }
+as_pattern_with_inferred_wildcard[pattern_ty]:
+    | target=pattern_as_clause {
+        _Py_MatchAs(NULL, target->v.Name.id, EXTRA) }
 
-capture_pattern[expr_ty]:
+pattern_as_clause[expr_ty]:
+    | 'as' pattern_capture_target {pattern_capture_target}
+
+pattern_capture_target[expr_ty]:
     | !"__" name=NAME !('.' | '(' | '=') {
         _PyPegen_set_expr_context(p, name, Store) }
 
-constraint_pattern[expr_ty]:
+or_pattern[pattern_ty]:
+    | patterns[asdl_pattern_seq*]='|'.simple_pattern+{
+        asdl_seq_LEN(patterns) == 1 ? asdl_seq_GET(patterns, 0) : _Py_MatchOr(patterns, EXTRA) }
+
+simple_pattern[pattern_ty]: # Subnode where "as" and "or" patterns must be parenthesised
+    | closed_pattern
+    | value_constraint
+
+value_constraint[pattern_ty]:
     | id_constraint
     | eq_constraint
 
-id_constraint[expr_ty]:
-    | 'is' e=primary { _Py_UnaryOp(IdCheck, e, EXTRA) }
+id_constraint[pattern_ty]:
+    | 'is' e=closed_expr { _Py_MatchValue(IdCheck, e, EXTRA) }
 
-eq_constraint[expr_ty]:
-    | '==' e=primary { _Py_UnaryOp(EqCheck, e, EXTRA) }
+eq_constraint[pattern_ty]:
+    | '==' e=closed_expr { _Py_MatchValue(EqCheck, e, EXTRA) }
 
-inferred_constraint_pattern[expr_ty]:
-    | e=inferred_id_constraint { _Py_UnaryOp(IdCheck, e, EXTRA) }
-    | e=inferred_eq_constraint { _Py_UnaryOp(EqCheck, e, EXTRA) }
+closed_expr[expr_ty]: # Require a single token or a closing delimiter in expression
+    | primary
+    | closed_factor
 
-inferred_id_constraint[expr_ty]:
-    | literal_none
-    | literal_ellipsis
+closed_factor[expr_ty]: # "factor" is the main grammar node defining these unary ops
+    | '+' a=primary { _Py_UnaryOp(UAdd, a, EXTRA) }
+    | '-' a=primary { _Py_UnaryOp(USub, a, EXTRA) }
+    | '~' a=primary { _Py_UnaryOp(Invert, a, EXTRA) }
+    # 'power' intentionally omitted as it is a binary op
 
-inferred_eq_constraint[expr_ty]:
-    | attr_constraint
-    | numeric_constraint
-    | strings
+closed_pattern[pattern_ty]:
+    | wildcard_pattern
+    | group_pattern
+    | structural_constraint
 
-attr_constraint[expr_ty]:
-    | attr !('.' | '(' | '=')
+wildcard_pattern[pattern_ty]:
+    | "__" { _Py_MatchAlways(EXTRA) }
+
+group_pattern[pattern_ty]:
+    | '(' pattern=pattern ')' { pattern }
+
+structural_constraint[pattern_ty]:
+    | sequence_constraint
+    | mapping_constraint
+    | attrs_constraint
+    | class_constraint
+
+sequence_constraint[pattern_ty]:
+    | '[' patterns=sequence_constraint_elements? ']' {
+        _Py_MatchSequence(patterns, EXTRA) }
+sequence_constraint_elements[asdl_pattern_seq*]:
+    | items=','.sequence_constraint_element+ ','? { items }
+sequence_constraint_element[pattern_ty]:
+    | star_pattern
+    | simple_pattern
+    | as_pattern_with_inferred_wildcard
+star_pattern[pattern_ty]:
+    | '*' target=pattern_as_clause {
+        _Py_MatchRestOfSequence(target->v.Name.id, EXTRA) }
+    | '*' wildcard_pattern {
+        _Py_MatchRestOfSequence(NULL, EXTRA) }
+
+mapping_constraint[pattern_ty]:
+    | '{' items=[mapping_constraint_elements] '}' {
+        _Py_MatchMapping(
+            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, items)),
+            EXTRA) }
+mapping_constraint_elements[adsl_seq*]:
+    | items=','.key_value_constraint+ ','? { items }
+key_value_constraint[KeyPatternPair*]:
+    | key=closed_expr target=pattern_as_clause {
+        _PyPegen_key_pattern_pair(p, key, _Py_MatchAs(NULL, target->v.Name.id, EXTRA)) }
+    | key=closed_expr ':' pattern=simple_pattern {
+        _PyPegen_key_pattern_pair(p, key, pattern) }
+    | double_star_capture
+double_star_capture[KeyPatternPair*]:
+    | '**' target=pattern_as_clause {
+        _PyPegen_key_pattern_pair(p, NULL, _Py_MatchAs(NULL, target->v.Name.id, EXTRA)) }
+
+
+attrs_constraint[pattern_ty]:
+    | cls=name_or_attr '{' items=[attrs_constraint_elements] '}' {
+        _Py_MatchAttrs(
+            cls,
+            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, items)),
+            EXTRA) }
 attr[expr_ty]:
     | value=name_or_attr '.' attr=NAME {
        _Py_Attribute(value, attr->v.Name.id, Load, EXTRA) }
 name_or_attr[expr_ty]:
     | attr
     | NAME
+attrs_constraint_elements[adsl_seq*]:
+    | items=','.attr_value_constraint+ ','? { items }
+attr_value_constraint[KeyPatternPair*]:
+    | '.' key=NAME target=pattern_as_clause {
+        _PyPegen_key_pattern_pair(p, key, _Py_MatchAs(NULL, target->v.Name.id, EXTRA)) }
+    | '.' key=NAME pattern=value_constraint {
+        _PyPegen_key_pattern_pair(p, key, pattern) }
+    | '.' key=NAME ':' pattern=simple_pattern {
+        _PyPegen_key_pattern_pair(p, key, pattern) }
+    | '.' key=NAME {
+        _PyPegen_key_pattern_pair(p, key, _Py_MatchAlways(EXTRA)) }
 
-numeric_constraint[expr_ty]:
-    | signed_number !('+' | '-')
-    | real=signed_number '+' imag=NUMBER { _Py_BinOp(real, Add, imag, EXTRA) }
-    | real=signed_number '-' imag=NUMBER  { _Py_BinOp(real, Sub, imag, EXTRA) }
-signed_number[expr_ty]:
-    | NUMBER
-    | '-' number=NUMBER { _Py_UnaryOp(USub, number, EXTRA) }
-
-
-group_pattern[expr_ty]:
-    | '(' pattern=pattern ')' { pattern }
-
-sequence_pattern[expr_ty]:
-    | '[' values=maybe_sequence_pattern? ']' { _Py_List(values, Load, EXTRA) }
-    | '(' values=open_sequence_pattern? ')' { _Py_Tuple(values, Load, EXTRA) }
-open_sequence_pattern[asdl_seq*]:
-    | value=maybe_star_pattern ',' values=maybe_sequence_pattern? {
-        _PyPegen_seq_insert_in_front(p, value, values) }
-maybe_sequence_pattern[asdl_seq*]:
-    | values=','.maybe_star_pattern+ ','? { values }
-maybe_star_pattern[expr_ty]:
-    | star_pattern
-    | pattern
-star_pattern[expr_ty]:
-    | '*' value=(wildcard_pattern | capture_pattern) {
-        _Py_Starred(value, Store, EXTRA) }
-
-mapping_pattern[expr_ty]:
-    | '{' items=items_pattern? '}' {
-        _Py_Dict(CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, items)), CHECK(asdl_expr_seq*, _PyPegen_get_values(p, items)), EXTRA) }
-items_pattern[asdl_seq*]:
-    | items=','.key_value_pattern+ ','? { items }
-key_value_pattern[KeyValuePair*]:
-    | key=(primary | numeric_constraint) ':' value=pattern {
-        _PyPegen_key_value_pair(p, key, value) }
-    | double_star_pattern
-double_star_pattern[KeyValuePair*]:
-    | '**' value=capture_pattern { _PyPegen_key_value_pair(p, NULL, value) }
-
-class_pattern[expr_ty]:
-    | func=name_or_attr '(' ')' { _Py_Call(func, NULL, NULL, EXTRA) }
-    | func=name_or_attr '(' args=positional_patterns ','? ')' {
-        _Py_Call(func, args, NULL, EXTRA) }
-    | func=name_or_attr '(' keywords=keyword_patterns ','? ')' {
-        _Py_Call(func, NULL, keywords, EXTRA) }
-    | func=name_or_attr '(' args=positional_patterns ',' keywords=keyword_patterns ','? ')' {
-        _Py_Call(func, args, keywords, EXTRA) }
-positional_patterns[asdl_expr_seq*]:
-    | args[asdl_expr_seq*]=','.pattern+ { args }
-keyword_patterns[asdl_keyword_seq*]:
-    | keywords[asdl_keyword_seq*]=','.keyword_pattern+ { keywords }
-keyword_pattern[keyword_ty]:
-    | arg=NAME '=' value=pattern { _Py_keyword(arg->v.Name.id, value, EXTRA) }
+class_constraint[pattern_ty]:
+    | cls=name_or_attr '(' ')' {
+        _Py_MatchClass(cls, NULL, NULL, NULL, EXTRA) }
+    | cls=name_or_attr '(' patterns=positional_patterns ','? ')' {
+        _Py_MatchClass(cls, patterns, NULL, NULL, EXTRA) }
+    | cls=name_or_attr '(' extra_items=class_constraint_attrs ')' {
+        _Py_MatchClass(cls,
+            NULL,
+            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, extra_items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, extra_items)),
+            EXTRA) }
+    | cls=name_or_attr '(' patterns=positional_patterns ',' extra_items=class_constraint_attrs ')' {
+        _Py_MatchClass(cls,
+            patterns,
+            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, extra_items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, extra_items)),
+            EXTRA) }
+positional_patterns[asdl_pattern_seq*]:
+    | items=','.positional_pattern+ { items }
+positional_pattern:
+    | simple_pattern
+    | pattern_as_clause
+class_constraint_attrs[adsl_seq*]:
+    | '**' '{' items=[attrs_constraint_elements] '}' { items }
 
 return_stmt[stmt_ty]:
     | 'return' a=[star_expressions] { _Py_Return(a, EXTRA) }

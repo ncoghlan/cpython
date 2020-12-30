@@ -50,10 +50,11 @@ module Python
           | Expr(expr value)
           | Pass | Break | Continue
 
+          -- NOTE: stmt/expr/pattern attribute lists must be kept consistent
           -- col_offset is the byte offset in the utf8 string the parser uses
           attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
 
-          -- BoolOp() can use left & right?
+          -- BoolOp() could use left & right?
     expr = BoolOp(boolop op, expr* values)
          | NamedExpr(expr target, expr value)
          | BinOp(expr left, operator op, expr right)
@@ -85,15 +86,28 @@ module Python
          | Name(identifier id, expr_context ctx)
          | List(expr* elts, expr_context ctx)
          | Tuple(expr* elts, expr_context ctx)
-         | SkippedBinding
 
          -- can appear only in Subscript
          | Slice(expr? lower, expr? upper, expr? step)
 
-         -- only used in patterns
-         | MatchAs(expr pattern, identifier name)
-         | MatchOr(expr* patterns)
+          -- NOTE: stmt/expr/pattern attribute lists must be kept consistent
+          -- col_offset is the byte offset in the utf8 string the parser uses
+          attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
 
+    pattern = MatchAlways
+         | MatchValue(matchop op, expr operand)
+         | MatchSequence(pattern* patterns)
+         | MatchMapping(expr* keys, pattern* patterns)
+         | MatchAttrs(expr cls, identifier* attrs, pattern* patterns)
+         | MatchClass(expr cls, pattern* patterns, identifier* extra_attrs, pattern* extra_patterns)
+
+         | MatchRestOfSequence(identifier? target)
+         # A NULL entry in the MatchMapping key list handles capturing extra mapping keys
+
+         | MatchAs(pattern pattern, identifier target)
+         | MatchOr(pattern* patterns)
+
+          -- NOTE: stmt/expr/pattern attribute lists must be kept consistent
           -- col_offset is the byte offset in the utf8 string the parser uses
           attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
 
@@ -104,12 +118,10 @@ module Python
     operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv
 
-    -- TODO: Consider making `constraint` a separate type, duplicating the
-    --       existing unaryop code as necessary, as the unaryop based approach
-    --       introduces several constraint-or-not checks in the unaryop code
     -- Note: these names have to be 11 characters or less to avoid getting
     --       a line-too-long reflow error in the AST code generator
-    unaryop = Invert | Not | UAdd | USub | EqCheck | IdCheck
+    unaryop = Invert | Not | UAdd | USub
+    matchop = EqCheck | IdCheck
 
     cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn
 
@@ -133,7 +145,7 @@ module Python
 
     withitem = (expr context_expr, expr? optional_vars)
 
-    match_case = (expr pattern, expr? guard, stmt* body)
+    match_case = (pattern pattern, expr? guard, stmt* body)
 
     type_ignore = TypeIgnore(int lineno, string tag)
 }
