@@ -17,6 +17,8 @@ typedef struct _stmt *stmt_ty;
 
 typedef struct _expr *expr_ty;
 
+typedef struct _pattern *pattern_ty;
+
 typedef enum _expr_context { Load=1, Store=2, Del=3 } expr_context_ty;
 
 typedef enum _boolop { And=1, Or=2 } boolop_ty;
@@ -25,8 +27,9 @@ typedef enum _operator { Add=1, Sub=2, Mult=3, MatMult=4, Div=5, Mod=6, Pow=7,
                          LShift=8, RShift=9, BitOr=10, BitXor=11, BitAnd=12,
                          FloorDiv=13 } operator_ty;
 
-typedef enum _unaryop { Invert=1, Not=2, UAdd=3, USub=4, EqCheck=5, IdCheck=6 }
-                        unaryop_ty;
+typedef enum _unaryop { Invert=1, Not=2, UAdd=3, USub=4 } unaryop_ty;
+
+typedef enum _matchop { EqCheck=1, IdCheck=2 } matchop_ty;
 
 typedef enum _cmpop { Eq=1, NotEq=2, Lt=3, LtE=4, Gt=5, GtE=6, Is=7, IsNot=8,
                       In=9, NotIn=10 } cmpop_ty;
@@ -70,6 +73,13 @@ typedef struct {
 } asdl_expr_seq;
 
 asdl_expr_seq *_Py_asdl_expr_seq_new(Py_ssize_t size, PyArena *arena);
+
+typedef struct {
+    _ASDL_SEQ_HEAD
+    pattern_ty typed_elements[1];
+} asdl_pattern_seq;
+
+asdl_pattern_seq *_Py_asdl_pattern_seq_new(Py_ssize_t size, PyArena *arena);
 
 typedef struct {
     _ASDL_SEQ_HEAD
@@ -327,9 +337,7 @@ enum _expr_kind {BoolOp_kind=1, NamedExpr_kind=2, BinOp_kind=3, UnaryOp_kind=4,
                   YieldFrom_kind=15, Compare_kind=16, Call_kind=17,
                   FormattedValue_kind=18, JoinedStr_kind=19, Constant_kind=20,
                   Attribute_kind=21, Subscript_kind=22, Starred_kind=23,
-                  Name_kind=24, List_kind=25, Tuple_kind=26,
-                  SkippedBinding_kind=27, Slice_kind=28, MatchAs_kind=29,
-                  MatchOr_kind=30};
+                  Name_kind=24, List_kind=25, Tuple_kind=26, Slice_kind=27};
 struct _expr {
     enum _expr_kind kind;
     union {
@@ -472,13 +480,59 @@ struct _expr {
             expr_ty step;
         } Slice;
 
+    } v;
+    int lineno;
+    int col_offset;
+    int end_lineno;
+    int end_col_offset;
+};
+
+enum _pattern_kind {MatchAlways_kind=1, MatchValue_kind=2,
+                     MatchSequence_kind=3, MatchMapping_kind=4,
+                     MatchAttrs_kind=5, MatchClass_kind=6,
+                     MatchRestOfSequence_kind=7, MatchAs_kind=8,
+                     MatchOr_kind=9};
+struct _pattern {
+    enum _pattern_kind kind;
+    union {
         struct {
-            expr_ty pattern;
-            identifier name;
+            matchop_ty op;
+            expr_ty operand;
+        } MatchValue;
+
+        struct {
+            asdl_pattern_seq *patterns;
+        } MatchSequence;
+
+        struct {
+            asdl_expr_seq *keys;
+            asdl_pattern_seq *patterns;
+        } MatchMapping;
+
+        struct {
+            expr_ty cls;
+            asdl_identifier_seq *attrs;
+            asdl_pattern_seq *patterns;
+        } MatchAttrs;
+
+        struct {
+            expr_ty cls;
+            asdl_pattern_seq *patterns;
+            asdl_identifier_seq *extra_attrs;
+            asdl_pattern_seq *extra_patterns;
+        } MatchClass;
+
+        struct {
+            identifier target;
+        } MatchRestOfSequence;
+
+        struct {
+            pattern_ty pattern;
+            identifier target;
         } MatchAs;
 
         struct {
-            asdl_expr_seq *patterns;
+            asdl_pattern_seq *patterns;
         } MatchOr;
 
     } v;
@@ -552,7 +606,7 @@ struct _withitem {
 };
 
 struct _match_case {
-    expr_ty pattern;
+    pattern_ty pattern;
     expr_ty guard;
     asdl_stmt_seq *body;
 };
@@ -776,20 +830,46 @@ expr_ty _Py_List(asdl_expr_seq * elts, expr_context_ty ctx, int lineno, int
 expr_ty _Py_Tuple(asdl_expr_seq * elts, expr_context_ty ctx, int lineno, int
                   col_offset, int end_lineno, int end_col_offset, PyArena
                   *arena);
-#define SkippedBinding(a0, a1, a2, a3, a4) _Py_SkippedBinding(a0, a1, a2, a3, a4)
-expr_ty _Py_SkippedBinding(int lineno, int col_offset, int end_lineno, int
-                           end_col_offset, PyArena *arena);
 #define Slice(a0, a1, a2, a3, a4, a5, a6, a7) _Py_Slice(a0, a1, a2, a3, a4, a5, a6, a7)
 expr_ty _Py_Slice(expr_ty lower, expr_ty upper, expr_ty step, int lineno, int
                   col_offset, int end_lineno, int end_col_offset, PyArena
                   *arena);
+#define MatchAlways(a0, a1, a2, a3, a4) _Py_MatchAlways(a0, a1, a2, a3, a4)
+pattern_ty _Py_MatchAlways(int lineno, int col_offset, int end_lineno, int
+                           end_col_offset, PyArena *arena);
+#define MatchValue(a0, a1, a2, a3, a4, a5, a6) _Py_MatchValue(a0, a1, a2, a3, a4, a5, a6)
+pattern_ty _Py_MatchValue(matchop_ty op, expr_ty operand, int lineno, int
+                          col_offset, int end_lineno, int end_col_offset,
+                          PyArena *arena);
+#define MatchSequence(a0, a1, a2, a3, a4, a5) _Py_MatchSequence(a0, a1, a2, a3, a4, a5)
+pattern_ty _Py_MatchSequence(asdl_pattern_seq * patterns, int lineno, int
+                             col_offset, int end_lineno, int end_col_offset,
+                             PyArena *arena);
+#define MatchMapping(a0, a1, a2, a3, a4, a5, a6) _Py_MatchMapping(a0, a1, a2, a3, a4, a5, a6)
+pattern_ty _Py_MatchMapping(asdl_expr_seq * keys, asdl_pattern_seq * patterns,
+                            int lineno, int col_offset, int end_lineno, int
+                            end_col_offset, PyArena *arena);
+#define MatchAttrs(a0, a1, a2, a3, a4, a5, a6, a7) _Py_MatchAttrs(a0, a1, a2, a3, a4, a5, a6, a7)
+pattern_ty _Py_MatchAttrs(expr_ty cls, asdl_identifier_seq * attrs,
+                          asdl_pattern_seq * patterns, int lineno, int
+                          col_offset, int end_lineno, int end_col_offset,
+                          PyArena *arena);
+#define MatchClass(a0, a1, a2, a3, a4, a5, a6, a7, a8) _Py_MatchClass(a0, a1, a2, a3, a4, a5, a6, a7, a8)
+pattern_ty _Py_MatchClass(expr_ty cls, asdl_pattern_seq * patterns,
+                          asdl_identifier_seq * extra_attrs, asdl_pattern_seq *
+                          extra_patterns, int lineno, int col_offset, int
+                          end_lineno, int end_col_offset, PyArena *arena);
+#define MatchRestOfSequence(a0, a1, a2, a3, a4, a5) _Py_MatchRestOfSequence(a0, a1, a2, a3, a4, a5)
+pattern_ty _Py_MatchRestOfSequence(identifier target, int lineno, int
+                                   col_offset, int end_lineno, int
+                                   end_col_offset, PyArena *arena);
 #define MatchAs(a0, a1, a2, a3, a4, a5, a6) _Py_MatchAs(a0, a1, a2, a3, a4, a5, a6)
-expr_ty _Py_MatchAs(expr_ty pattern, identifier name, int lineno, int
-                    col_offset, int end_lineno, int end_col_offset, PyArena
-                    *arena);
+pattern_ty _Py_MatchAs(pattern_ty pattern, identifier target, int lineno, int
+                       col_offset, int end_lineno, int end_col_offset, PyArena
+                       *arena);
 #define MatchOr(a0, a1, a2, a3, a4, a5) _Py_MatchOr(a0, a1, a2, a3, a4, a5)
-expr_ty _Py_MatchOr(asdl_expr_seq * patterns, int lineno, int col_offset, int
-                    end_lineno, int end_col_offset, PyArena *arena);
+pattern_ty _Py_MatchOr(asdl_pattern_seq * patterns, int lineno, int col_offset,
+                       int end_lineno, int end_col_offset, PyArena *arena);
 #define comprehension(a0, a1, a2, a3, a4) _Py_comprehension(a0, a1, a2, a3, a4)
 comprehension_ty _Py_comprehension(expr_ty target, expr_ty iter, asdl_expr_seq
                                    * ifs, int is_async, PyArena *arena);
@@ -817,7 +897,7 @@ alias_ty _Py_alias(identifier name, identifier asname, PyArena *arena);
 withitem_ty _Py_withitem(expr_ty context_expr, expr_ty optional_vars, PyArena
                          *arena);
 #define match_case(a0, a1, a2, a3) _Py_match_case(a0, a1, a2, a3)
-match_case_ty _Py_match_case(expr_ty pattern, expr_ty guard, asdl_stmt_seq *
+match_case_ty _Py_match_case(pattern_ty pattern, expr_ty guard, asdl_stmt_seq *
                              body, PyArena *arena);
 #define TypeIgnore(a0, a1, a2) _Py_TypeIgnore(a0, a1, a2)
 type_ignore_ty _Py_TypeIgnore(int lineno, string tag, PyArena *arena);

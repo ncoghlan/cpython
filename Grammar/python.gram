@@ -274,7 +274,7 @@ wildcard_pattern[pattern_ty]:
     | "__" { _Py_MatchAlways(EXTRA) }
 
 group_pattern[pattern_ty]:
-    | '(' pattern=pattern ')' { pattern }
+    | '(' pattern=open_pattern ')' { pattern }
 
 structural_constraint[pattern_ty]:
     | sequence_constraint

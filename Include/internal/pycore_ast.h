@@ -95,8 +95,15 @@ struct ast_state {
     PyObject *Lt_type;
     PyObject *MatMult_singleton;
     PyObject *MatMult_type;
+    PyObject *MatchAlways_type;
     PyObject *MatchAs_type;
+    PyObject *MatchAttrs_type;
+    PyObject *MatchClass_type;
+    PyObject *MatchMapping_type;
     PyObject *MatchOr_type;
+    PyObject *MatchRestOfSequence_type;
+    PyObject *MatchSequence_type;
+    PyObject *MatchValue_type;
     PyObject *Match_type;
     PyObject *Mod_singleton;
     PyObject *Mod_type;
@@ -123,7 +130,6 @@ struct ast_state {
     PyObject *Return_type;
     PyObject *SetComp_type;
     PyObject *Set_type;
-    PyObject *SkippedBinding_type;
     PyObject *Slice_type;
     PyObject *Starred_type;
     PyObject *Store_singleton;
@@ -159,11 +165,13 @@ struct ast_state {
     PyObject *asname;
     PyObject *ast;
     PyObject *attr;
+    PyObject *attrs;
     PyObject *bases;
     PyObject *body;
     PyObject *boolop_type;
     PyObject *cases;
     PyObject *cause;
+    PyObject *cls;
     PyObject *cmpop_type;
     PyObject *col_offset;
     PyObject *comparators;
@@ -181,6 +189,8 @@ struct ast_state {
     PyObject *excepthandler_type;
     PyObject *expr_context_type;
     PyObject *expr_type;
+    PyObject *extra_attrs;
+    PyObject *extra_patterns;
     PyObject *finalbody;
     PyObject *format_spec;
     PyObject *func;
@@ -205,6 +215,7 @@ struct ast_state {
     PyObject *lineno;
     PyObject *lower;
     PyObject *match_case_type;
+    PyObject *matchop_type;
     PyObject *mod_type;
     PyObject *module;
     PyObject *msg;
@@ -217,6 +228,7 @@ struct ast_state {
     PyObject *optional_vars;
     PyObject *orelse;
     PyObject *pattern;
+    PyObject *pattern_type;
     PyObject *patterns;
     PyObject *posonlyargs;
     PyObject *returns;

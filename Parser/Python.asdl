@@ -102,7 +102,7 @@ module Python
          | MatchClass(expr cls, pattern* patterns, identifier* extra_attrs, pattern* extra_patterns)
 
          | MatchRestOfSequence(identifier? target)
-         # A NULL entry in the MatchMapping key list handles capturing extra mapping keys
+         -- A NULL entry in the MatchMapping key list handles capturing extra mapping keys
 
          | MatchAs(pattern pattern, identifier target)
          | MatchOr(pattern* patterns)
