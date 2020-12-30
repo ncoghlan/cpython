@@ -231,7 +231,7 @@ as_pattern_with_inferred_wildcard[pattern_ty]:
         _Py_MatchAs(NULL, target->v.Name.id, EXTRA) }
 
 pattern_as_clause[expr_ty]:
-    | 'as' pattern_capture_target {pattern_capture_target}
+    | 'as' target=pattern_capture_target { target }
 
 pattern_capture_target[expr_ty]:
     | !"__" name=NAME !('.' | '(' | '=') {
@@ -286,7 +286,7 @@ sequence_constraint[pattern_ty]:
     | '[' patterns=sequence_constraint_elements? ']' {
         _Py_MatchSequence(patterns, EXTRA) }
 sequence_constraint_elements[asdl_pattern_seq*]:
-    | items=','.sequence_constraint_element+ ','? { items }
+    | items[asdl_pattern_seq*]=','.sequence_constraint_element+ ','? { items }
 sequence_constraint_element[pattern_ty]:
     | star_pattern
     | simple_pattern
@@ -300,10 +300,10 @@ star_pattern[pattern_ty]:
 mapping_constraint[pattern_ty]:
     | '{' items=[mapping_constraint_elements] '}' {
         _Py_MatchMapping(
-            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, items)),
-            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, items)),
+            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, items)),
             EXTRA) }
-mapping_constraint_elements[adsl_seq*]:
+mapping_constraint_elements[asdl_seq*]:
     | items=','.key_value_constraint+ ','? { items }
 key_value_constraint[KeyPatternPair*]:
     | key=closed_expr target=pattern_as_clause {
@@ -320,8 +320,8 @@ attrs_constraint[pattern_ty]:
     | cls=name_or_attr '{' items=[attrs_constraint_elements] '}' {
         _Py_MatchAttrs(
             cls,
-            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, items)),
-            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, items)),
+            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, items)),
             EXTRA) }
 attr[expr_ty]:
     | value=name_or_attr '.' attr=NAME {
@@ -329,7 +329,7 @@ attr[expr_ty]:
 name_or_attr[expr_ty]:
     | attr
     | NAME
-attrs_constraint_elements[adsl_seq*]:
+attrs_constraint_elements[asdl_seq*]:
     | items=','.attr_value_constraint+ ','? { items }
 attr_value_constraint[KeyPatternPair*]:
     | '.' key=NAME target=pattern_as_clause {
@@ -349,21 +349,21 @@ class_constraint[pattern_ty]:
     | cls=name_or_attr '(' extra_items=class_constraint_attrs ')' {
         _Py_MatchClass(cls,
             NULL,
-            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, extra_items)),
-            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, extra_items)),
+            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, extra_items)),
             EXTRA) }
     | cls=name_or_attr '(' patterns=positional_patterns ',' extra_items=class_constraint_attrs ')' {
         _Py_MatchClass(cls,
             patterns,
-            CHECK(asdl_expr_seq*, _PyPegen_get_keys(p, extra_items)),
-            CHECK(asdl_pattern_seq*, _PyPegen_get_values(p, extra_items)),
+            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)),
+            CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, extra_items)),
             EXTRA) }
 positional_patterns[asdl_pattern_seq*]:
     | items=','.positional_pattern+ { items }
 positional_pattern:
     | simple_pattern
     | pattern_as_clause
-class_constraint_attrs[adsl_seq*]:
+class_constraint_attrs[asdl_seq*]:
     | '**' '{' items=[attrs_constraint_elements] '}' { items }
 
 return_stmt[stmt_ty]:

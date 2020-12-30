@@ -494,18 +494,18 @@ static asdl_pattern_seq* sequence_constraint_elements_rule(Parser *p);
 static pattern_ty sequence_constraint_element_rule(Parser *p);
 static pattern_ty star_pattern_rule(Parser *p);
 static pattern_ty mapping_constraint_rule(Parser *p);
-static adsl_seq* mapping_constraint_elements_rule(Parser *p);
+static asdl_seq* mapping_constraint_elements_rule(Parser *p);
 static KeyPatternPair* key_value_constraint_rule(Parser *p);
 static KeyPatternPair* double_star_capture_rule(Parser *p);
 static pattern_ty attrs_constraint_rule(Parser *p);
 static expr_ty attr_rule(Parser *p);
 static expr_ty name_or_attr_rule(Parser *p);
-static adsl_seq* attrs_constraint_elements_rule(Parser *p);
+static asdl_seq* attrs_constraint_elements_rule(Parser *p);
 static KeyPatternPair* attr_value_constraint_rule(Parser *p);
 static pattern_ty class_constraint_rule(Parser *p);
 static asdl_pattern_seq* positional_patterns_rule(Parser *p);
 static void *positional_pattern_rule(Parser *p);
-static adsl_seq* class_constraint_attrs_rule(Parser *p);
+static asdl_seq* class_constraint_attrs_rule(Parser *p);
 static stmt_ty return_stmt_rule(Parser *p);
 static stmt_ty raise_stmt_rule(Parser *p);
 static stmt_ty function_def_rule(Parser *p);
@@ -5224,15 +5224,15 @@ pattern_as_clause_rule(Parser *p)
         }
         D(fprintf(stderr, "%*c> pattern_as_clause[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "'as' pattern_capture_target"));
         Token * _keyword;
-        expr_ty pattern_capture_target_var;
+        expr_ty target;
         if (
             (_keyword = _PyPegen_expect_token(p, 520))  // token='as'
             &&
-            (pattern_capture_target_var = pattern_capture_target_rule(p))  // pattern_capture_target
+            (target = pattern_capture_target_rule(p))  // pattern_capture_target
         )
         {
             D(fprintf(stderr, "%*c+ pattern_as_clause[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "'as' pattern_capture_target"));
-            _res = pattern_capture_target;
+            _res = target;
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -6386,7 +6386,7 @@ mapping_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchMapping ( CHECK ( asdl_expr_seq * , _PyPegen_get_keys ( p , items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_values ( p , items ) ) , EXTRA );
+            _res = _Py_MatchMapping ( CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -6405,7 +6405,7 @@ mapping_constraint_rule(Parser *p)
 }
 
 // mapping_constraint_elements: ','.key_value_constraint+ ','?
-static adsl_seq*
+static asdl_seq*
 mapping_constraint_elements_rule(Parser *p)
 {
     D(p->level++);
@@ -6413,7 +6413,7 @@ mapping_constraint_elements_rule(Parser *p)
         D(p->level--);
         return NULL;
     }
-    adsl_seq* _res = NULL;
+    asdl_seq* _res = NULL;
     int _mark = p->mark;
     { // ','.key_value_constraint+ ','?
         if (p->error_indicator) {
@@ -6675,7 +6675,7 @@ attrs_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchAttrs ( cls , CHECK ( asdl_expr_seq * , _PyPegen_get_keys ( p , items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_values ( p , items ) ) , EXTRA );
+            _res = _Py_MatchAttrs ( cls , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -6847,7 +6847,7 @@ name_or_attr_rule(Parser *p)
 }
 
 // attrs_constraint_elements: ','.attr_value_constraint+ ','?
-static adsl_seq*
+static asdl_seq*
 attrs_constraint_elements_rule(Parser *p)
 {
     D(p->level++);
@@ -6855,7 +6855,7 @@ attrs_constraint_elements_rule(Parser *p)
         D(p->level--);
         return NULL;
     }
-    adsl_seq* _res = NULL;
+    asdl_seq* _res = NULL;
     int _mark = p->mark;
     { // ','.attr_value_constraint+ ','?
         if (p->error_indicator) {
@@ -7177,7 +7177,7 @@ class_constraint_rule(Parser *p)
         Token * _literal;
         Token * _literal_1;
         expr_ty cls;
-        adsl_seq* extra_items;
+        asdl_seq* extra_items;
         if (
             (cls = name_or_attr_rule(p))  // name_or_attr
             &&
@@ -7198,7 +7198,7 @@ class_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchClass ( cls , NULL , CHECK ( asdl_expr_seq * , _PyPegen_get_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_values ( p , extra_items ) ) , EXTRA );
+            _res = _Py_MatchClass ( cls , NULL , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -7220,7 +7220,7 @@ class_constraint_rule(Parser *p)
         Token * _literal_1;
         Token * _literal_2;
         expr_ty cls;
-        adsl_seq* extra_items;
+        asdl_seq* extra_items;
         asdl_pattern_seq* patterns;
         if (
             (cls = name_or_attr_rule(p))  // name_or_attr
@@ -7246,7 +7246,7 @@ class_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchClass ( cls , patterns , CHECK ( asdl_expr_seq * , _PyPegen_get_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_values ( p , extra_items ) ) , EXTRA );
+            _res = _Py_MatchClass ( cls , patterns , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -7361,7 +7361,7 @@ positional_pattern_rule(Parser *p)
 }
 
 // class_constraint_attrs: '**' '{' attrs_constraint_elements? '}'
-static adsl_seq*
+static asdl_seq*
 class_constraint_attrs_rule(Parser *p)
 {
     D(p->level++);
@@ -7369,7 +7369,7 @@ class_constraint_attrs_rule(Parser *p)
         D(p->level--);
         return NULL;
     }
-    adsl_seq* _res = NULL;
+    asdl_seq* _res = NULL;
     int _mark = p->mark;
     { // '**' '{' attrs_constraint_elements? '}'
         if (p->error_indicator) {

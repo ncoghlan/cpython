@@ -1669,7 +1669,7 @@ _PyPegen_key_pattern_pair(Parser *p, expr_ty key, pattern_ty pattern)
 
 /* Extracts all keys from an asdl_seq* of KeyPatternPair*'s */
 asdl_expr_seq *
-_PyPegen_get_keys(Parser *p, asdl_seq *seq)
+_PyPegen_get_pattern_keys(Parser *p, asdl_seq *seq)
 {
     Py_ssize_t len = asdl_seq_LEN(seq);
     asdl_expr_seq *new_seq = _Py_asdl_expr_seq_new(len, p->arena);
@@ -1684,11 +1684,11 @@ _PyPegen_get_keys(Parser *p, asdl_seq *seq)
 }
 
 /* Extracts all values from an asdl_seq* of KeyPatternPair*'s */
-asdl_expr_seq *
-_PyPegen_get_values(Parser *p, asdl_seq *seq)
+asdl_pattern_seq *
+_PyPegen_get_patterns(Parser *p, asdl_seq *seq)
 {
     Py_ssize_t len = asdl_seq_LEN(seq);
-    asdl_expr_seq *new_seq = _Py_asdl_expr_seq_new(len, p->arena);
+    asdl_pattern_seq *new_seq = _Py_asdl_expr_seq_new(len, p->arena);
     if (!new_seq) {
         return NULL;
     }
