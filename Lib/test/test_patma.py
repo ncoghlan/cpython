@@ -115,7 +115,7 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(z, 2)
 
     def test_patma_010(self):
-        match (1):
+        match ():
             case []:
                 x = 0
         self.assertEqual(x, 0)
@@ -1780,6 +1780,7 @@ class TestPatma(unittest.TestCase):
         self.assertIs(whereis(Point(0, 0)), None)
 
     def test_patma_181(self):
+        # PEP 642 TODO: fails with current attribute/class matching implementation
         def whereis(point):
             match point:
                 case Point{.y as var, .x == 1}:
@@ -1970,7 +1971,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_197(self):
         w = [Point(-1, 0), Point(1, 2)]
         match w:
-            case [Point(as x1, as y1), Point(as x2, as y2)] as p2:
+            case [Point(as x1, as y1), (Point(as x2, as y2) as p2)]:
                 z = 0
         self.assertEqual(w, [Point(-1, 0), Point(1, 2)])
         self.assertIs(x1, w[0].x)
@@ -2468,6 +2469,7 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_243(self):
+        # PEP 642 TODO: irrefutable clause detection is not working properly
         self.assert_syntax_error("""
         match 42:
             case as x:
@@ -2478,7 +2480,6 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_244(self):
-        # PEP 642: this may not be a syntax error any more, just weird spelling
         self.assert_syntax_error("""
         match ...:
             case {**__}:
@@ -2618,7 +2619,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_256(self):
         x = 0
         match(x):
-            case[as x]:
+            case(as x):
                 y = 0
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -2703,7 +2704,7 @@ class TestPatma(unittest.TestCase):
         x = ((0, 1), (2, 3))
         match x:
             case [(([((as a) as b), ((as c) as d)] as e) as w), \
-                  ([((as f) as g), as h] as i)] as z:
+                  (([((as f) as g), as h] as i) as z)]:
                 y = 0
         self.assertEqual(a, 0)
         self.assertEqual(b, 0)
@@ -2775,6 +2776,7 @@ class TestPatma(unittest.TestCase):
 
     @no_perf
     def test_patma_272(self):
+        # PEP 642 TODO: irrefutable clause detection is not working properly
         self.assert_syntax_error("""
         match ...:
             case as x:
@@ -2818,8 +2820,9 @@ class TestPatma(unittest.TestCase):
 
     def test_patma_277(self):
         x = [[{0: 0}]]
+        # PEP 642 TODO: this test fails with current implementation
         match x:
-            case list([{(-0-0j): ((int{.real == (0+0j), .imag == (0-0j)} | (== 1)) as z)},]):
+            case list([[{(-0-0j): ((int{.real == (0+0j), .imag == (0-0j)} | (== 1)) as z)},]]):
                 y = 0
         self.assertEqual(x, [[{0: 0}]])
         self.assertEqual(y, 0)
