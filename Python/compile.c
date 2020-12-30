@@ -5586,16 +5586,21 @@ compiler_pattern_attrs(struct compiler *c, pattern_ty p, pattern_context *pc)
         // just fail, don't crash out of the interpreter
         return compiler_error(c, "class lookup must be a simple name or dotted name");
     }
-    PyObject *extra_names;
-    CHECK(extra_names = PyTuple_New(0));
-    ADDOP_LOAD_CONST_NEW(c, extra_names);
-    ADDOP_I(c, MATCH_CLASS, npatterns);
+    PyObject *attr_names;
+    CHECK(attr_names = PyTuple_New(nattrs));
+    Py_ssize_t i;
+    for (i = 0; i < nattrs; i++) {
+        PyObject *name = asdl_seq_GET(attrs, i);
+        Py_INCREF(name);
+        PyTuple_SET_ITEM(attr_names, i, name);
+    }
+    ADDOP_LOAD_CONST_NEW(c, attr_names);
+    ADDOP_I(c, MATCH_CLASS, 0); // No positional patterns
     // The above check fails if the subject is not an instance of the specified
     // class, or if any of the requested attributes are missing
     ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
     NEXT_BLOCK(c);
     // TOS is now a tuple of (npatterns + n_extra_attrs) attributes.
-    Py_ssize_t i;
     for (i = 0; i < npatterns; i++) {
         pattern_ty pattern = asdl_seq_GET(patterns, i);
         if (WILDCARD_CHECK(pattern)) {
