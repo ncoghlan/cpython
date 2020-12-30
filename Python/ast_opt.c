@@ -771,24 +771,36 @@ astfold_pattern(pattern_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL_SEQ(astfold_pattern, pattern, node_->v.MatchOr.patterns);
             break;
         case MatchAs_kind:
-            CALL(astfold_pattern, pattern_ty, node_->v.MatchAs.pattern);
+            if (node_->v.MatchAs.pattern) {
+                CALL(astfold_pattern, pattern_ty, node_->v.MatchAs.pattern);
+            }
             break;
         case MatchValue_kind:
             CALL(astfold_expr, expr_ty, node_->v.MatchValue.value);
             break;
         case MatchSequence_kind:
-            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchSequence.patterns);
+            if (node_->v.MatchSequence.patterns) {
+                CALL_SEQ(astfold_pattern, pattern, node_->v.MatchSequence.patterns);
+            }
             break;
         case MatchMapping_kind:
-            CALL_SEQ(astfold_expr, expr, node_->v.MatchMapping.keys);
-            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchMapping.patterns);
+            if (node_->v.MatchMapping.keys) {
+                CALL_SEQ(astfold_expr, expr, node_->v.MatchMapping.keys);
+                CALL_SEQ(astfold_pattern, pattern, node_->v.MatchMapping.patterns);
+            }
             break;
         case MatchAttrs_kind:
-            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchAttrs.patterns);
+            if (node_->v.MatchAttrs.patterns) {
+                CALL_SEQ(astfold_pattern, pattern, node_->v.MatchAttrs.patterns);
+            }
             break;
         case MatchClass_kind:
-            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.patterns);
-            CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.extra_patterns);
+            if (node_->v.MatchClass.patterns) {
+                CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.patterns);
+            }
+            if (node_->v.MatchClass.extra_patterns) {
+                CALL_SEQ(astfold_pattern, pattern, node_->v.MatchClass.extra_patterns);
+            }
             break;
         case MatchAlways_kind:
         case MatchRestOfSequence_kind:

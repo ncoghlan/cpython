@@ -1735,7 +1735,7 @@ init_types(struct ast_state *state)
         "        | MatchAttrs(expr cls, identifier* attrs, pattern* patterns)\n"
         "        | MatchClass(expr cls, pattern* patterns, identifier* extra_attrs, pattern* extra_patterns)\n"
         "        | MatchRestOfSequence(identifier? target)\n"
-        "        | MatchAs(pattern pattern, identifier target)\n"
+        "        | MatchAs(pattern? pattern, identifier target)\n"
         "        | MatchOr(pattern* patterns)");
     if (!state->pattern_type) return 0;
     if (!add_attributes(state, state->pattern_type, pattern_attributes, 4))
@@ -1784,8 +1784,10 @@ init_types(struct ast_state *state)
         return 0;
     state->MatchAs_type = make_type(state, "MatchAs", state->pattern_type,
                                     MatchAs_fields, 2,
-        "MatchAs(pattern pattern, identifier target)");
+        "MatchAs(pattern? pattern, identifier target)");
     if (!state->MatchAs_type) return 0;
+    if (PyObject_SetAttr(state->MatchAs_type, state->pattern, Py_None) == -1)
+        return 0;
     state->MatchOr_type = make_type(state, "MatchOr", state->pattern_type,
                                     MatchOr_fields, 1,
         "MatchOr(pattern* patterns)");
@@ -3657,11 +3659,6 @@ MatchAs(pattern_ty pattern, identifier target, int lineno, int col_offset, int
         end_lineno, int end_col_offset, PyArena *arena)
 {
     pattern_ty p;
-    if (!pattern) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'pattern' is required for MatchAs");
-        return NULL;
-    }
     if (!target) {
         PyErr_SetString(PyExc_ValueError,
                         "field 'target' is required for MatchAs");
@@ -9852,9 +9849,9 @@ obj2ast_pattern(struct ast_state *state, PyObject* obj, pattern_ty* out,
         if (_PyObject_LookupAttr(obj, state->pattern, &tmp) < 0) {
             return 1;
         }
-        if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"pattern\" missing from MatchAs");
-            return 1;
+        if (tmp == NULL || tmp == Py_None) {
+            Py_CLEAR(tmp);
+            pattern = NULL;
         }
         else {
             int res;

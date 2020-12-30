@@ -85,7 +85,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_007(self):
         x = False
         match 4:
-            acse == 0 | == 1 | == 2 | == 3:
+            case == 0 | == 1 | == 2 | == 3:
                 x = True
         self.assertIs(x, False)
 
@@ -94,7 +94,7 @@ class TestPatma(unittest.TestCase):
         class A:
             y = 1
         match x:
-            case == A.y as z:
+            case (== A.y) as z:
                 pass
         self.assertEqual(x, 0)
         self.assertEqual(A.y, 1)
@@ -115,7 +115,7 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(z, 2)
 
     def test_patma_010(self):
-        match ():
+        match (1):
             case []:
                 x = 0
         self.assertEqual(x, 0)
@@ -337,7 +337,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case {0: [== 1, == 2, {}]}:
                 y = 0
-            case {0: [== 1, == 2, {}] | is True} |
+            case {0: [== 1, == 2, {}]} | is True | \
                  {1: [[]]} | {0: [== 1, == 2, {}]} | [] | == "X" | {}:
                 y = 1
             case []:
@@ -381,7 +381,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_040(self):
         x = 0
         match x:
-            case ((== 0) as z) | ((== 1) as z) | ((== 2) as z) if z == x % 2:
+            case (((== 0) as z) | ((== 1) as z) | ((== 2) as z)) if z == x % 2:
                 y = 0
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -390,7 +390,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_041(self):
         x = 1
         match x:
-            case ((== 0) as z) | ((== 1) as z) | ((== 2) as z) if z == x % 2:
+            case (((== 0) as z) | ((== 1) as z) | ((== 2) as z)) if z == x % 2:
                 y = 0
         self.assertEqual(x, 1)
         self.assertEqual(y, 0)
@@ -400,7 +400,7 @@ class TestPatma(unittest.TestCase):
         x = 2
         y = None
         match x:
-            case ((== 0) as z) | ((== 1) as z) | ((== 2) as z) if z == x % 2:
+            case (((== 0) as z) | ((== 1) as z) | ((== 2) as z)) if z == x % 2:
                 y = 0
         self.assertEqual(x, 2)
         self.assertIs(y, None)
@@ -410,7 +410,7 @@ class TestPatma(unittest.TestCase):
         x = 3
         y = None
         match x:
-            case ((== 0) as z) | ((== 1) as z) | ((== 2) as z) if z == x % 2:
+            case (((== 0) as z) | ((== 1) as z) | ((== 2) as z)) if z == x % 2:
                 y = 0
         self.assertEqual(x, 3)
         self.assertIs(y, None)
@@ -423,15 +423,15 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(x, ())
         self.assertEqual(y, 0)
 
-""" PEP 642: disallowed syntax
-    def test_patma_045(self):
-        x = ()
-        match x:
-            case ():
-                y = 0
-        self.assertEqual(x, ())
-        self.assertEqual(y, 0)
-"""
+    """ PEP 642: disallowed syntax
+        def test_patma_045(self):
+            x = ()
+            match x:
+                case ():
+                    y = 0
+            self.assertEqual(x, ())
+            self.assertEqual(y, 0)
+    """
 
     def test_patma_046(self):
         x = (0,)
@@ -523,7 +523,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case []:
                 y = 0
-        self.assertEqual([* as x], [1, 2, 3])
+        self.assertEqual([*x], [1, 2, 3])
         self.assertIs(y, None)
 
     def test_patma_056(self):
@@ -603,9 +603,9 @@ class TestPatma(unittest.TestCase):
     def test_patma_064(self):
         x = "x"
         match x:
-            case "x":
+            case == "x":
                 y = 0
-            case "y":
+            case == "y":
                 y = 1
         self.assertEqual(x, "x")
         self.assertEqual(y, 0)
@@ -801,7 +801,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case ((== 1) as z) if not (x := 1):
                 y = 0
-            case 0:
+            case == 0:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 1)
@@ -1158,91 +1158,91 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(y, 1)
         self.assertEqual(z, {})
 
-""" PEP 642 illegal syntax
-    def test_patma_121(self):
-        match ():
-            case ():
-                x = 0
-        self.assertEqual(x, 0)
+    """ PEP 642 illegal syntax
+        def test_patma_121(self):
+            match ():
+                case ():
+                    x = 0
+            self.assertEqual(x, 0)
 
 
-    def test_patma_122(self):
-        match (0, 1, 2):
-            case (* as x,):
-                y = 0
-        self.assertEqual(x, [0, 1, 2])
-        self.assertEqual(y, 0)
+        def test_patma_122(self):
+            match (0, 1, 2):
+                case (* as x,):
+                    y = 0
+            self.assertEqual(x, [0, 1, 2])
+            self.assertEqual(y, 0)
 
-    def test_patma_123(self):
-        match (0, 1, 2):
-            case 0, * as x:
-                y = 0
-        self.assertEqual(x, [1, 2])
-        self.assertEqual(y, 0)
+        def test_patma_123(self):
+            match (0, 1, 2):
+                case 0, * as x:
+                    y = 0
+            self.assertEqual(x, [1, 2])
+            self.assertEqual(y, 0)
 
-    def test_patma_124(self):
-        match (0, 1, 2):
-            case (0, 1, * as x,):
-                y = 0
-        self.assertEqual(x, [2])
-        self.assertEqual(y, 0)
+        def test_patma_124(self):
+            match (0, 1, 2):
+                case (0, 1, * as x,):
+                    y = 0
+            self.assertEqual(x, [2])
+            self.assertEqual(y, 0)
 
-    def test_patma_125(self):
-        match (0, 1, 2):
-            case 0, 1, 2, * as x:
-                y = 0
-        self.assertEqual(x, [])
-        self.assertEqual(y, 0)
+        def test_patma_125(self):
+            match (0, 1, 2):
+                case 0, 1, 2, * as x:
+                    y = 0
+            self.assertEqual(x, [])
+            self.assertEqual(y, 0)
 
-    def test_patma_126(self):
-        match (0, 1, 2):
-            case * as x, 2,:
-                y = 0
-        self.assertEqual(x, [0, 1])
-        self.assertEqual(y, 0)
+        def test_patma_126(self):
+            match (0, 1, 2):
+                case * as x, 2,:
+                    y = 0
+            self.assertEqual(x, [0, 1])
+            self.assertEqual(y, 0)
 
-    def test_patma_127(self):
-        match (0, 1, 2):
-            case (* as x, 1, 2):
-                y = 0
-        self.assertEqual(x, [0])
-        self.assertEqual(y, 0)
+        def test_patma_127(self):
+            match (0, 1, 2):
+                case (* as x, 1, 2):
+                    y = 0
+            self.assertEqual(x, [0])
+            self.assertEqual(y, 0)
 
-    def test_patma_128(self):
-        match (0, 1, 2):
-            case * as x, 0, 1, 2,:
-                y = 0
-        self.assertEqual(x, [])
-        self.assertEqual(y, 0)
+        def test_patma_128(self):
+            match (0, 1, 2):
+                case * as x, 0, 1, 2,:
+                    y = 0
+            self.assertEqual(x, [])
+            self.assertEqual(y, 0)
 
-    def test_patma_129(self):
-        match (0, 1, 2):
-            case (0, * as x, 2):
-                y = 0
-        self.assertEqual(x, [1])
-        self.assertEqual(y, 0)
+        def test_patma_129(self):
+            match (0, 1, 2):
+                case (0, * as x, 2):
+                    y = 0
+            self.assertEqual(x, [1])
+            self.assertEqual(y, 0)
 
-    def test_patma_130(self):
-        match (0, 1, 2):
-            case 0, 1, * as x, 2,:
-                y = 0
-        self.assertEqual(x, [])
-        self.assertEqual(y, 0)
+        def test_patma_130(self):
+            match (0, 1, 2):
+                case 0, 1, * as x, 2,:
+                    y = 0
+            self.assertEqual(x, [])
+            self.assertEqual(y, 0)
 
-    def test_patma_131(self):
-        match (0, 1, 2):
-            case (0, * as x, 1, 2):
-                y = 0
-        self.assertEqual(x, [])
-        self.assertEqual(y, 0)
+        def test_patma_131(self):
+            match (0, 1, 2):
+                case (0, * as x, 1, 2):
+                    y = 0
+            self.assertEqual(x, [])
+            self.assertEqual(y, 0)
 
-    def test_patma_132(self):
-        match (0, 1, 2):
-            case * as x,:
-                y = 0
-        self.assertEqual(x, [0, 1, 2])
-        self.assertEqual(y, 0)
-""" # End PEP 642 illegal syntax
+        def test_patma_132(self):
+            match (0, 1, 2):
+                case * as x,:
+                    y = 0
+            self.assertEqual(x, [0, 1, 2])
+            self.assertEqual(y, 0)
+    """ # End PEP 642 illegal syntax
 
     def test_patma_133(self):
         x = collections.defaultdict(int, {0: 1})
@@ -1263,7 +1263,7 @@ class TestPatma(unittest.TestCase):
                 y = 0
             case {0: == 0}:
                 y = 1
-            case {**z}:
+            case {** as z}:
                 y = 2
         self.assertEqual(x, {0: 1})
         self.assertEqual(y, 2)
@@ -1301,7 +1301,7 @@ class TestPatma(unittest.TestCase):
                 y = 0
             case {0: == 0}:
                 y = 0
-            case {**z}:
+            case {** as z}:
                 y = 1
         self.assertEqual(x, {0: 1})
         self.assertEqual(y, 1)
@@ -1314,7 +1314,7 @@ class TestPatma(unittest.TestCase):
                 y = 0
             case {0: == 0}:
                 y = 0
-            case {0: __, **z}:
+            case {0: __, ** as z}:
                 y = 1
         self.assertEqual(x, {0: 1})
         self.assertEqual(y, 1)
@@ -1453,7 +1453,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_153(self):
         x = 0
         match w := x,:
-            case [(as y) as v,]:
+            case [((as y) as v),]:
                 z = 0
         self.assertEqual(x, 0)
         self.assertIs(y, x)
@@ -1502,7 +1502,7 @@ class TestPatma(unittest.TestCase):
         match x:
             case == -1e1000:
                 y = 0
-            case 0:
+            case == 0:
                 y = 1
         self.assertEqual(x, 0)
         self.assertEqual(y, 1)
@@ -1869,29 +1869,29 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(z, 0)
         self.assertEqual(rest, list(range(2, 10)))
 
-""" PEP 642 illegal syntax
-    def test_patma_188(self):
-        w = range(100)
-        match w:
-            case (x, y, *rest):
-                z = 0
-        self.assertEqual(w, range(100))
-        self.assertEqual(x, 0)
-        self.assertEqual(y, 1)
-        self.assertEqual(z, 0)
-        self.assertEqual(rest, list(range(2, 100)))
+    """ PEP 642 illegal syntax
+        def test_patma_188(self):
+            w = range(100)
+            match w:
+                case (x, y, *rest):
+                    z = 0
+            self.assertEqual(w, range(100))
+            self.assertEqual(x, 0)
+            self.assertEqual(y, 1)
+            self.assertEqual(z, 0)
+            self.assertEqual(rest, list(range(2, 100)))
 
-    def test_patma_189(self):
-        w = range(1000)
-        match w:
-            case x, y, *rest:
-                z = 0
-        self.assertEqual(w, range(1000))
-        self.assertEqual(x, 0)
-        self.assertEqual(y, 1)
-        self.assertEqual(z, 0)
-        self.assertEqual(rest, list(range(2, 1000)))
-"""
+        def test_patma_189(self):
+            w = range(1000)
+            match w:
+                case x, y, *rest:
+                    z = 0
+            self.assertEqual(w, range(1000))
+            self.assertEqual(x, 0)
+            self.assertEqual(y, 1)
+            self.assertEqual(z, 0)
+            self.assertEqual(rest, list(range(2, 1000)))
+    """
 
     def test_patma_190(self):
         w = range(1 << 10)
@@ -1903,27 +1903,27 @@ class TestPatma(unittest.TestCase):
         self.assertEqual(y, 1)
         self.assertEqual(z, 0)
 
-""" PEP 642 illegal syntax
-    def test_patma_191(self):
-        w = range(1 << 20)
-        match w:
-            case (x, y, *__):
-                z = 0
-        self.assertEqual(w, range(1 << 20))
-        self.assertEqual(x, 0)
-        self.assertEqual(y, 1)
-        self.assertEqual(z, 0)
+    """ PEP 642 illegal syntax
+        def test_patma_191(self):
+            w = range(1 << 20)
+            match w:
+                case (x, y, *__):
+                    z = 0
+            self.assertEqual(w, range(1 << 20))
+            self.assertEqual(x, 0)
+            self.assertEqual(y, 1)
+            self.assertEqual(z, 0)
 
-    def test_patma_192(self):
-        w = range(1 << 30)
-        match w:
-            case x, y, *__:
-                z = 0
-        self.assertEqual(w, range(1 << 30))
-        self.assertEqual(x, 0)
-        self.assertEqual(y, 1)
-        self.assertEqual(z, 0)
-"""
+        def test_patma_192(self):
+            w = range(1 << 30)
+            match w:
+                case x, y, *__:
+                    z = 0
+            self.assertEqual(w, range(1 << 30))
+            self.assertEqual(x, 0)
+            self.assertEqual(y, 1)
+            self.assertEqual(z, 0)
+    """
 
     def test_patma_193(self):
         x = {"bandwidth": 0, "latency": 1}
@@ -2205,7 +2205,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_213(self):
         def f(w):
             match w:
-                case (p, q) as x:
+                case [as p, as q] as x:
                     out = locals()
                     del out["w"]
                     return out
@@ -2461,7 +2461,7 @@ class TestPatma(unittest.TestCase):
         x = "Hello"
         y = None
         match x:
-            case f"{x}" as z:
+            case (== f"{x}") as z:
                 y = 0
         self.assertIs(x, z)
         self.assertEqual(y, 0)
@@ -2618,7 +2618,7 @@ class TestPatma(unittest.TestCase):
     def test_patma_256(self):
         x = 0
         match(x):
-            case[x]:
+            case[as x]:
                 y = 0
         self.assertEqual(x, 0)
         self.assertEqual(y, 0)
@@ -2702,8 +2702,8 @@ class TestPatma(unittest.TestCase):
     def test_patma_265(self):
         x = ((0, 1), (2, 3))
         match x:
-            case (((as a) as b, (as c) as d) as e) as w, \
-                  (((as f) as g, as h) as i) as z:
+            case [(([((as a) as b), ((as c) as d)] as e) as w), \
+                  ([((as f) as g), as h] as i)] as z:
                 y = 0
         self.assertEqual(a, 0)
         self.assertEqual(b, 0)

@@ -104,7 +104,7 @@ module Python
          | MatchRestOfSequence(identifier? target)
          -- A NULL entry in the MatchMapping key list handles capturing extra mapping keys
 
-         | MatchAs(pattern pattern, identifier target)
+         | MatchAs(pattern? pattern, identifier target)
          | MatchOr(pattern* patterns)
 
           -- NOTE: stmt/expr/pattern attribute lists must be kept consistent

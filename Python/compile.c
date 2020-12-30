@@ -5484,6 +5484,15 @@ pattern_helper_store_name(struct compiler *c, identifier n, pattern_context *pc)
     return 1;
 }
 
+static int
+pattern_helper_store_match(struct compiler *c, identifier n, pattern_context *pc)
+{
+    // Store the value at TOS and report a successful match
+    ADDOP(c, DUP_TOP);
+    CHECK(pattern_helper_store_name(c, n, pc));
+    ADDOP_LOAD_CONST(c, Py_True);
+    return 1;
+}
 
 static int
 compiler_pattern_subpattern(struct compiler *c, pattern_ty p, pattern_context *pc)
@@ -5501,72 +5510,96 @@ static int
 compiler_pattern_as(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
     assert(p->kind == MatchAs_kind);
-    basicblock *end;
-    CHECK(end = compiler_new_block(c));
-    CHECK(compiler_pattern(c, p->v.MatchAs.pattern, pc));
-    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
-    NEXT_BLOCK(c);
-    ADDOP(c, DUP_TOP);
-    CHECK(pattern_helper_store_name(c, p->v.MatchAs.target, pc));
-    ADDOP_LOAD_CONST(c, Py_True);
-    compiler_use_next_block(c, end);
+    if (p->v.MatchAs.pattern) {
+        // Only save value if the pattern matches
+        basicblock *end;
+        CHECK(end = compiler_new_block(c));
+        CHECK(compiler_pattern(c, p->v.MatchAs.pattern, pc));
+        ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+        NEXT_BLOCK(c);
+        CHECK(pattern_helper_store_match(c, p->v.MatchAs.target, pc));
+        compiler_use_next_block(c, end);
+    } else {
+        // Always save value (equivalent to checking against wildcard pattern)
+        CHECK(pattern_helper_store_match(c, p->v.MatchAs.target, pc));
+    }
     return 1;
 }
 
+static int
+validate_attributes_in_pattern(struct compiler *c, asdl_identifier_seq *attrs)
+{
+    Py_ssize_t nattrs = asdl_seq_LEN(attrs);
+    for (Py_ssize_t i = 0; i < nattrs; i++) {
+        identifier attr = asdl_seq_GET(attrs, i);
+        for (Py_ssize_t j = i + 1; j < nattrs; j++) {
+            identifier other = asdl_seq_GET(attrs, j);
+            if (!PyUnicode_Compare(attr, other)) {
+                compiler_error(c, "pattern attribute repeated: %U", attr);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
 
 static int
-compiler_pattern_class(struct compiler *c, pattern_ty p, pattern_context *pc)
+compiler_pattern_attrs(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-/*
-    asdl_expr_seq *args = p->v.Call.args;
-    asdl_keyword_seq *kwargs = p->v.Call.keywords;
-    Py_ssize_t nargs = asdl_seq_LEN(args);
-    Py_ssize_t nkwargs = asdl_seq_LEN(kwargs);
-    if (INT_MAX < nargs || INT_MAX < nargs + nkwargs - 1) {
-        const char *e = "too many sub-patterns in class pattern %R";
-        return compiler_error(c, e, p->v.Call.func);
+    // TODO: extract common helper functions from this and compiler_pattern_class
+    // TODO: Don't check __match_args__ for attribute patterns
+    //       (likely by adding a dedicated MATCH_ATTRIBUTES opcode)
+    assert(p->kind == MatchAttrs_kind);
+    expr_ty cls = p->v.MatchAttrs.cls;
+    asdl_pattern_seq *patterns = p->v.MatchAttrs.patterns;
+    asdl_identifier_seq *attrs = p->v.MatchAttrs.attrs;
+    Py_ssize_t nattrs = attrs ? asdl_seq_LEN(attrs) : 0;
+    Py_ssize_t npatterns = patterns ? asdl_seq_LEN(patterns) : 0;
+    if (nattrs) {
+        CHECK(!validate_attributes_in_pattern(c, attrs));
     }
-    CHECK(!validate_keywords(c, kwargs));
+    if (nattrs != npatterns) {
+        // AST validator shouldn't let this happen, but if it does,
+        // just fail, don't crash out of the interpreter
+        const char * e = "attrs (%d) / patterns (%d) length mismatch in attribute pattern";
+        return compiler_error(c, e, nattrs, npatterns);
+    }
+    if (INT_MAX < npatterns) {
+        const char *e = "too many sub-patterns in attribute pattern for %R";
+        return compiler_error(c, e, cls);
+    }
     basicblock *end;
     CHECK(end = compiler_new_block(c));
     // The name of the class can only be an (optionally dotted) name:
-    if (p->v.Call.func->kind == Attribute_kind) {
-        CHECK(pattern_helper_load_attr(c, p->v.Call.func, pc));
+    if (cls->kind == Attribute_kind) {
+        CHECK(pattern_helper_load_attr(c, cls, pc));
     }
-    else {
-        assert(p->v.Call.func->kind == Name_kind);
-        assert(p->v.Call.func->v.Name.ctx == Load);
-        CHECK(compiler_nameop(c, p->v.Call.func->v.Name.id, Load));
+    else if (cls->kind == Name_kind) {
+        // AST validator should check the name context is right on the node
+        CHECK(compiler_nameop(c, cls->v.Name.id, Load));
+    } else {
+        // AST validator shouldn't let this happen, but if it does,
+        // just fail, don't crash out of the interpreter
+        return compiler_error(c, "class lookup must be a simple name or dotted name");
     }
-    PyObject *kwnames;
-    CHECK(kwnames = PyTuple_New(nkwargs));
-    Py_ssize_t i;
-    for (i = 0; i < nkwargs; i++) {
-        PyObject *name = ((keyword_ty) asdl_seq_GET(kwargs, i))->arg;
-        Py_INCREF(name);
-        PyTuple_SET_ITEM(kwnames, i, name);
-    }
-    ADDOP_LOAD_CONST_NEW(c, kwnames);
-    ADDOP_I(c, MATCH_CLASS, nargs);
+    PyObject *extra_names;
+    CHECK(extra_names = PyTuple_New(0));
+    ADDOP_LOAD_CONST_NEW(c, extra_names);
+    ADDOP_I(c, MATCH_CLASS, npatterns);
+    // The above check fails if the subject is not an instance of the specified
+    // class, or if any of the requested attributes are missing
     ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
     NEXT_BLOCK(c);
-    // TOS is now a tuple of (nargs + nkwargs) attributes.
-    for (i = 0; i < nargs + nkwargs; i++) {
-        expr_ty arg;
-        if (i < nargs) {
-            // Positional:
-            arg = asdl_seq_GET(args, i);
-        }
-        else {
-            // Keyword:
-            arg = ((keyword_ty) asdl_seq_GET(kwargs, i - nargs))->value;
-        }
-        if (WILDCARD_CHECK(arg)) {
+    // TOS is now a tuple of (npatterns + n_extra_attrs) attributes.
+    Py_ssize_t i;
+    for (i = 0; i < npatterns; i++) {
+        pattern_ty pattern = asdl_seq_GET(patterns, i);
+        if (WILDCARD_CHECK(pattern)) {
             continue;
         }
         // Get the i-th attribute, and match it against the i-th pattern:
         ADDOP_I(c, GET_INDEX, i);
-        CHECK(compiler_pattern_subpattern(c, arg, pc));
+        CHECK(compiler_pattern_subpattern(c, pattern, pc));
         // TOS is True or False, with the attribute beneath. Pop the attribute,
         // we're done with it:
         ADDOP(c, ROT_TWO);
@@ -5581,23 +5614,118 @@ compiler_pattern_class(struct compiler *c, pattern_ty p, pattern_context *pc)
     // attributes beneath it. Pop it, we're done.
     ADDOP(c, ROT_TWO);
     ADDOP(c, POP_TOP);
-*/
+    return 1;
+}
+
+static int
+compiler_pattern_class(struct compiler *c, pattern_ty p, pattern_context *pc)
+{
+    // TODO: implement the runtime `__match_args__ == None` check
+    assert(p->kind == MatchClass_kind);
+    expr_ty cls = p->v.MatchClass.cls;
+    asdl_pattern_seq *patterns = p->v.MatchClass.patterns;
+    asdl_identifier_seq *extra_attrs = p->v.MatchClass.extra_attrs;
+    asdl_pattern_seq *extra_patterns = p->v.MatchClass.extra_patterns;
+    Py_ssize_t npatterns = patterns ? asdl_seq_LEN(patterns) : 0;
+    Py_ssize_t n_extra_attrs = extra_attrs ? asdl_seq_LEN(extra_attrs) : 0;
+    Py_ssize_t n_extra_patterns = extra_patterns ? asdl_seq_LEN(extra_patterns) : 0;
+    if (n_extra_attrs) {
+        CHECK(!validate_attributes_in_pattern(c, extra_attrs));
+    }
+    if (n_extra_attrs != n_extra_patterns) {
+        // AST validator shouldn't let this happen, but if it does,
+        // just fail, don't crash out of the interpreter
+        const char * e = "attrs (%d) / patterns (%d) length mismatch in class pattern";
+        return compiler_error(c, e, n_extra_attrs, n_extra_patterns);
+    }
+    if (INT_MAX < npatterns || INT_MAX < npatterns + n_extra_attrs - 1) {
+        const char *e = "too many sub-patterns in class pattern for %R";
+        return compiler_error(c, e, cls);
+    }
+    basicblock *end;
+    CHECK(end = compiler_new_block(c));
+    // The name of the class can only be an (optionally dotted) name:
+    if (cls->kind == Attribute_kind) {
+        CHECK(pattern_helper_load_attr(c, cls, pc));
+    }
+    else if (cls->kind == Name_kind) {
+        // AST validator should check the name context is right on the node
+        CHECK(compiler_nameop(c, cls->v.Name.id, Load));
+    } else {
+        // AST validator shouldn't let this happen, but if it does,
+        // just fail, don't crash out of the interpreter
+        return compiler_error(c, "class lookup must be a simple name or dotted name");
+    }
+    PyObject *extra_names;
+    CHECK(extra_names = PyTuple_New(n_extra_attrs));
+    Py_ssize_t i;
+    for (i = 0; i < n_extra_attrs; i++) {
+        PyObject *name = asdl_seq_GET(extra_attrs, i);
+        Py_INCREF(name);
+        PyTuple_SET_ITEM(extra_names, i, name);
+    }
+    ADDOP_LOAD_CONST_NEW(c, extra_names);
+    ADDOP_I(c, MATCH_CLASS, npatterns);
+    // The above check fails if the subject is not an instance of the specified
+    // class, or if any of the requested attributes are missing
+    ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+    NEXT_BLOCK(c);
+    // TOS is now a tuple of (npatterns + n_extra_attrs) attributes.
+    for (i = 0; i < npatterns + n_extra_attrs; i++) {
+        pattern_ty pattern;
+        if (i < npatterns) {
+            // Positional
+            pattern = asdl_seq_GET(patterns, i);
+        }
+        else {
+            // Additional attribute
+            pattern = asdl_seq_GET(extra_patterns, i - n_extra_attrs);
+        }
+        if (WILDCARD_CHECK(pattern)) {
+            continue;
+        }
+        // Get the i-th attribute, and match it against the i-th pattern:
+        ADDOP_I(c, GET_INDEX, i);
+        CHECK(compiler_pattern_subpattern(c, pattern, pc));
+        // TOS is True or False, with the attribute beneath. Pop the attribute,
+        // we're done with it:
+        ADDOP(c, ROT_TWO);
+        ADDOP(c, POP_TOP);
+        ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
+        NEXT_BLOCK(c);
+    }
+    // If we made it this far, it's a match!
+    ADDOP_LOAD_CONST(c, Py_True);
+    compiler_use_next_block(c, end);
+    // TOS is True or False, but we've still got either a class or a tuple of
+    // attributes beneath it. Pop it, we're done.
+    ADDOP(c, ROT_TWO);
+    ADDOP(c, POP_TOP);
     return 1;
 }
 
 static int
 compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-/*
+    assert(p->kind == MatchMapping_kind);
     basicblock *fail, *end;
     CHECK(fail = compiler_new_block(c));
     CHECK(end = compiler_new_block(c));
-    asdl_expr_seq *keys = p->v.Dict.keys;
-    asdl_expr_seq *values = p->v.Dict.values;
-    Py_ssize_t size = asdl_seq_LEN(values);
-    // A starred pattern will be a keyless value. It is guranteed to be last:
+    asdl_expr_seq *keys = p->v.MatchMapping.keys;
+    asdl_pattern_seq *patterns = p->v.MatchMapping.patterns;
+    Py_ssize_t nkeys = asdl_seq_LEN(keys);
+    Py_ssize_t npatterns = asdl_seq_LEN(patterns);
+    if (nkeys != npatterns) {
+        // AST validator shouldn't let this happen, but if it does,
+        // just fail, don't crash out of the interpreter
+        const char * e = "keys (%d) / patterns (%d) length mismatch in mapping pattern";
+        return compiler_error(c, e, nkeys, npatterns);
+    }
+    Py_ssize_t size = asdl_seq_LEN(patterns);
+    // A starred pattern will be a keyless value. It is required to be last:
     int star = size ? !asdl_seq_GET(keys, size - 1) : 0;
     ADDOP(c, MATCH_MAPPING);
+    // The above check fails if the subject is not a mapping
     ADDOP_JUMP(c, JUMP_IF_FALSE_OR_POP, end);
     NEXT_BLOCK(c);
     if (!size) {
@@ -5621,8 +5749,7 @@ compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
     // the stack with a dict of remaining keys. Duplicate it so we don't lose
     // the subject:
     ADDOP(c, DUP_TOP);
-    // Collect all of the keys into a tuple for MATCH_KEYS. They can either be
-    // dotted names or literals:
+    // Collect all of the keys into a tuple for MATCH_KEYS.
     for (Py_ssize_t i = 0; i < size - star; i++) {
         expr_ty key = asdl_seq_GET(keys, i);
         if (!key) {
@@ -5634,17 +5761,18 @@ compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
     }
     ADDOP_I(c, BUILD_TUPLE, size - star);
     ADDOP_I(c, MATCH_KEYS, star);
+    // The above check fails if any of the requested keys are missing
     ADDOP_JUMP(c, POP_JUMP_IF_FALSE, fail);
     NEXT_BLOCK(c);
     // So far so good. There's now a tuple of values on the stack to match
     // sub-patterns against. Extract them using GET_INDEX:
     for (Py_ssize_t i = 0; i < size - star; i++) {
-        expr_ty value = asdl_seq_GET(values, i);
-        if (WILDCARD_CHECK(value)) {
+        pattern_ty pattern = asdl_seq_GET(patterns, i);
+        if (WILDCARD_CHECK(pattern)) {
             continue;
         }
         ADDOP_I(c, GET_INDEX, i);
-        CHECK(compiler_pattern_subpattern(c, value, pc));
+        CHECK(compiler_pattern_subpattern(c, pattern, pc));
         // TOS is True or False. Don't care about the value underneath anymore:
         ADDOP(c, ROT_TWO);
         ADDOP(c, POP_TOP);
@@ -5656,8 +5784,8 @@ compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
     if (star) {
         // There's now one of two things on TOS. If we had a starred name, it's
         // a dict of remaining items to bind:
-        PyObject *id = asdl_seq_GET(values, size - 1)->v.Name.id;
-        CHECK(pattern_helper_store_name(c, id, pc));
+        identifier name = asdl_seq_GET(patterns, size - 1)->v.MatchAs.target;
+        CHECK(pattern_helper_store_name(c, name, pc));
     }
     else {
         // Otherwise, it's just another reference to the subject underneath.
@@ -5671,7 +5799,6 @@ compiler_pattern_mapping(struct compiler *c, pattern_ty p, pattern_context *pc)
     ADDOP(c, POP_TOP);
     ADDOP_LOAD_CONST(c, Py_False);
     compiler_use_next_block(c, end);
-*/
     return 1;
 }
 
@@ -5744,20 +5871,18 @@ fail:
 static int
 compiler_pattern_sequence(struct compiler *c, pattern_ty p, pattern_context *pc)
 {
-/*
-    assert(p->kind == List_kind || p->kind == Tuple_kind);
-    asdl_expr_seq *values = (p->kind == Tuple_kind) ? p->v.Tuple.elts
-                                                    : p->v.List.elts;
-    Py_ssize_t size = asdl_seq_LEN(values);
+    assert(p->kind == MatchSequence_kind);
+    asdl_pattern_seq *patterns = p->v.MatchSequence.patterns;
+    Py_ssize_t size = asdl_seq_LEN(patterns);
     // Find a starred name, if it exists. There may be at most one:
     Py_ssize_t star = -1;
     for (Py_ssize_t i = 0; i < size; i++) {
-        expr_ty value = asdl_seq_GET(values, i);
-        if (value->kind != Starred_kind) {
+        pattern_ty pattern = asdl_seq_GET(patterns, i);
+        if (pattern->kind != MatchRestOfSequence_kind) {
             continue;
         }
         if (star >= 0) {
-            const char *e = "multiple starred names in sequence pattern";
+            const char *e = "multiple star patterns found in sequence pattern";
             return compiler_error(c, e);
         }
         star = i;
@@ -5798,17 +5923,19 @@ compiler_pattern_sequence(struct compiler *c, pattern_ty p, pattern_context *pc)
     ADDOP(c, ROT_TWO);
     // TOS is subject, length underneath.
     for (Py_ssize_t i = 0; i < size; i++) {
-        expr_ty value = asdl_seq_GET(values, i);
-        if (WILDCARD_CHECK(value)) {
+        pattern_ty pattern = asdl_seq_GET(patterns, i);
+        if (WILDCARD_CHECK(pattern)) {
             continue;
         }
         if (star < 0 || i < star) {
+            // No star pattern, or before a star pattern
             ADDOP_I(c, GET_INDEX, i);
+            CHECK(compiler_pattern_subpattern(c, pattern, pc));
         }
         else if (i == star) {
-            assert(value->kind == Starred_kind);
-            value = value->v.Starred.value;
-            if (WILDCARD_CHECK(value)) {
+            assert(pattern->kind == MatchRestOfSequence_kind);
+            identifier target = pattern->v.MatchRestOfSequence.target;
+            if (!target) {
                 continue;
             }
             Py_ssize_t end_items = ((size - 1 - i) << 8);
@@ -5820,12 +5947,13 @@ compiler_pattern_sequence(struct compiler *c, pattern_ty p, pattern_context *pc)
                 return compiler_error(c, e);
             }
             ADDOP_I(c, GET_INDEX_SLICE, end_items + i);
+            CHECK(pattern_helper_store_match(c, target, pc));
         }
         else {
-            // Basically a negative index:
+            // After a star pattern, so convert to negative index
             ADDOP_I(c, GET_INDEX_END, size - 1 - i);
+            CHECK(compiler_pattern_subpattern(c, pattern, pc));
         }
-        CHECK(compiler_pattern_subpattern(c, value, pc));
         // TOS is True or False. We're done with the item underneath:
         ADDOP(c, ROT_TWO);
         ADDOP(c, POP_TOP);
@@ -5845,7 +5973,6 @@ compiler_pattern_sequence(struct compiler *c, pattern_ty p, pattern_context *pc)
     ADDOP(c, POP_TOP);
     ADDOP_LOAD_CONST(c, Py_False);
     compiler_use_next_block(c, end);
-*/
     return 1;
 }
 
@@ -5903,7 +6030,7 @@ compiler_pattern(struct compiler *c, pattern_ty p, pattern_context *pc)
         case MatchMapping_kind:
             return compiler_pattern_mapping(c, p, pc);
         case MatchAttrs_kind:
-            return compiler_pattern_class(c, p, pc);
+            return compiler_pattern_attrs(c, p, pc);
         case MatchClass_kind:
             return compiler_pattern_class(c, p, pc);
         case MatchAs_kind:
@@ -5916,7 +6043,8 @@ compiler_pattern(struct compiler *c, pattern_ty p, pattern_context *pc)
     }
     // AST validator shouldn't let this happen, but if it does,
     // just fail, don't crash out of the interpreter
-    return compiler_error(c, "invalid match pattern node in AST");
+    const char *e = "invalid match pattern node in AST (kind=%d)";
+    return compiler_error(c, e, p->kind);
 }
 
 

@@ -283,7 +283,7 @@ structural_constraint[pattern_ty]:
     | class_constraint
 
 sequence_constraint[pattern_ty]:
-    | '[' patterns=sequence_constraint_elements? ']' {
+    | '[' patterns=[sequence_constraint_elements] ']' {
         _Py_MatchSequence(patterns, EXTRA) }
 sequence_constraint_elements[asdl_pattern_seq*]:
     | items[asdl_pattern_seq*]=','.sequence_constraint_element+ ','? { items }
@@ -320,7 +320,8 @@ attrs_constraint[pattern_ty]:
     | cls=name_or_attr '{' items=[attrs_constraint_elements] '}' {
         _Py_MatchAttrs(
             cls,
-            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, items)),
+            CHECK(asdl_identifier_seq*, _PyPegen_map_names_to_ids(p,
+                CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, items)))),
             CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, items)),
             EXTRA) }
 attr[expr_ty]:
@@ -349,20 +350,22 @@ class_constraint[pattern_ty]:
     | cls=name_or_attr '(' extra_items=class_constraint_attrs ')' {
         _Py_MatchClass(cls,
             NULL,
-            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)),
+            CHECK(asdl_identifier_seq*, _PyPegen_map_names_to_ids(p,
+                CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)))),
             CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, extra_items)),
             EXTRA) }
     | cls=name_or_attr '(' patterns=positional_patterns ',' extra_items=class_constraint_attrs ')' {
         _Py_MatchClass(cls,
             patterns,
-            CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)),
+            CHECK(asdl_identifier_seq*, _PyPegen_map_names_to_ids(p,
+                CHECK(asdl_expr_seq*, _PyPegen_get_pattern_keys(p, extra_items)))),
             CHECK(asdl_pattern_seq*, _PyPegen_get_patterns(p, extra_items)),
             EXTRA) }
 positional_patterns[asdl_pattern_seq*]:
-    | items=','.positional_pattern+ { items }
+    | items[asdl_pattern_seq*]=','.positional_pattern+ { items }
 positional_pattern:
     | simple_pattern
-    | pattern_as_clause
+    | as_pattern_with_inferred_wildcard
 class_constraint_attrs[asdl_seq*]:
     | '**' '{' items=[attrs_constraint_elements] '}' { items }
 

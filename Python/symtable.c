@@ -1724,7 +1724,9 @@ symtable_visit_pattern(struct symtable *st, pattern_ty p)
         }
         break;
     case MatchAs_kind:
-        VISIT(st, pattern, p->v.MatchAs.pattern);
+        if (p->v.MatchAs.pattern) {
+            VISIT(st, pattern, p->v.MatchAs.pattern);
+        }
         symtable_add_def(st, p->v.MatchAs.target, DEF_LOCAL);
         break;
     case MatchOr_kind:

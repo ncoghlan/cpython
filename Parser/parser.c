@@ -6675,7 +6675,7 @@ attrs_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchAttrs ( cls , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , items ) ) , EXTRA );
+            _res = _Py_MatchAttrs ( cls , CHECK ( asdl_identifier_seq * , _PyPegen_map_names_to_ids ( p , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , items ) ) ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -7198,7 +7198,7 @@ class_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchClass ( cls , NULL , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
+            _res = _Py_MatchClass ( cls , NULL , CHECK ( asdl_identifier_seq * , _PyPegen_map_names_to_ids ( p , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -7246,7 +7246,7 @@ class_constraint_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _Py_MatchClass ( cls , patterns , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
+            _res = _Py_MatchClass ( cls , patterns , CHECK ( asdl_identifier_seq * , _PyPegen_map_names_to_ids ( p , CHECK ( asdl_expr_seq * , _PyPegen_get_pattern_keys ( p , extra_items ) ) ) ) , CHECK ( asdl_pattern_seq * , _PyPegen_get_patterns ( p , extra_items ) ) , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -7281,9 +7281,9 @@ positional_patterns_rule(Parser *p)
             return NULL;
         }
         D(fprintf(stderr, "%*c> positional_patterns[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "','.positional_pattern+"));
-        asdl_seq * items;
+        asdl_pattern_seq* items;
         if (
-            (items = _gather_60_rule(p))  // ','.positional_pattern+
+            (items = (asdl_pattern_seq*)_gather_60_rule(p))  // ','.positional_pattern+
         )
         {
             D(fprintf(stderr, "%*c+ positional_patterns[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "','.positional_pattern+"));
@@ -7305,7 +7305,7 @@ positional_patterns_rule(Parser *p)
     return _res;
 }
 
-// positional_pattern: simple_pattern | pattern_as_clause
+// positional_pattern: simple_pattern | as_pattern_with_inferred_wildcard
 static void *
 positional_pattern_rule(Parser *p)
 {
@@ -7335,24 +7335,24 @@ positional_pattern_rule(Parser *p)
         D(fprintf(stderr, "%*c%s positional_pattern[%d-%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "simple_pattern"));
     }
-    { // pattern_as_clause
+    { // as_pattern_with_inferred_wildcard
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> positional_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "pattern_as_clause"));
-        expr_ty pattern_as_clause_var;
+        D(fprintf(stderr, "%*c> positional_pattern[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "as_pattern_with_inferred_wildcard"));
+        pattern_ty as_pattern_with_inferred_wildcard_var;
         if (
-            (pattern_as_clause_var = pattern_as_clause_rule(p))  // pattern_as_clause
+            (as_pattern_with_inferred_wildcard_var = as_pattern_with_inferred_wildcard_rule(p))  // as_pattern_with_inferred_wildcard
         )
         {
-            D(fprintf(stderr, "%*c+ positional_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "pattern_as_clause"));
-            _res = pattern_as_clause_var;
+            D(fprintf(stderr, "%*c+ positional_pattern[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "as_pattern_with_inferred_wildcard"));
+            _res = as_pattern_with_inferred_wildcard_var;
             goto done;
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s positional_pattern[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "pattern_as_clause"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "as_pattern_with_inferred_wildcard"));
     }
     _res = NULL;
   done:
