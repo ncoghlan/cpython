@@ -1780,7 +1780,6 @@ class TestPatma(unittest.TestCase):
         self.assertIs(whereis(Point(0, 0)), None)
 
     def test_patma_181(self):
-        # PEP 642 TODO: fails with current attribute/class matching implementation
         def whereis(point):
             match point:
                 case Point{.y as var, .x == 1}:
@@ -2818,7 +2817,6 @@ class TestPatma(unittest.TestCase):
 
     def test_patma_277(self):
         x = [[{0: 0}]]
-        # PEP 642 TODO: this test fails with current implementation
         match x:
             case list([[{(-0-0j): ((int{.real == (0+0j), .imag == (0-0j)} | (== 1)) as z)},]]):
                 y = 0
